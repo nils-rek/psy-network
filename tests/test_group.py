@@ -196,6 +196,14 @@ class TestEstimateGroupNetwork:
         with pytest.raises(ValueError, match="group_col"):
             estimate_group_network(two_group_data)
 
+    def test_mismatched_columns_raises(self):
+        """Should raise if groups have different variable names."""
+        rng = np.random.default_rng(42)
+        df1 = pd.DataFrame(rng.standard_normal((50, 3)), columns=["A", "B", "C"])
+        df2 = pd.DataFrame(rng.standard_normal((50, 3)), columns=["X", "Y", "Z"])
+        with pytest.raises(ValueError, match="same variable names"):
+            estimate_group_network([df1, df2], lambda1=0.1, lambda2=0.05)
+
 
 # ------------------------------------------------------------------ #
 # TestGroupNetwork
@@ -278,6 +286,20 @@ class TestGroupBootstrap:
         )
         summary = result.summary(statistic="edge", group="Group1")
         assert all(summary["group"] == "Group1")
+
+    def test_custom_group_labels(self, two_group_data):
+        """Bootstrap should preserve original group labels, not auto-generate."""
+        # Rename groups to non-default labels
+        data = two_group_data.copy()
+        data["group"] = data["group"].replace({"Group1": "Control", "Group2": "Treatment"})
+        result = bootnet_group(
+            data, group_col="group",
+            n_boots=5, statistics=["edge"],
+            lambda1=0.1, lambda2=0.05,
+            verbose=False,
+        )
+        groups_in_result = set(result.boot_statistics["group"].unique())
+        assert groups_in_result == {"Control", "Treatment"}
 
 
 # ------------------------------------------------------------------ #

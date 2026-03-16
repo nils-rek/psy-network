@@ -10,6 +10,7 @@ import pandas as pd
 from joblib import Parallel, delayed
 
 from ..bootstrap.engine import _extract_statistics
+from ._utils import parse_group_data
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -99,21 +100,29 @@ def _single_group_boot(
     from . import estimate_group_network
 
     rng = np.random.default_rng(rng_seed)
-    resampled = []
+
+    # Resample within each group, preserving original labels
+    resampled_dfs = {}
     for label in group_labels:
         df = group_dfs[label]
         idx = rng.choice(len(df), size=len(df), replace=True)
-        resampled.append(df.iloc[idx].reset_index(drop=True))
+        resampled_dfs[label] = df.iloc[idx].reset_index(drop=True)
+
+    # Pass as list, but we know labels are sorted and will become Group1, Group2...
+    # So we map back using position
+    resampled_list = [resampled_dfs[label] for label in group_labels]
 
     try:
-        gn = estimate_group_network(resampled, **est_kwargs)
+        gn = estimate_group_network(resampled_list, **est_kwargs)
         records = []
-        for label in group_labels:
-            net = gn[label]
+        # gn.group_labels will be ["Group1", "Group2", ...] for list input
+        # Map back to original labels by position
+        for orig_label, gn_label in zip(group_labels, gn.group_labels):
+            net = gn[gn_label]
             stats = _extract_statistics(net, statistics)
             for r in stats:
                 r["boot_id"] = boot_id
-                r["group"] = label
+                r["group"] = orig_label
             records.extend(stats)
         return records
     except Exception:
@@ -165,20 +174,8 @@ def bootnet_group(
     if statistics is None:
         statistics = ["edge", "strength", "closeness", "betweenness", "expectedInfluence"]
 
-    # Parse into per-group DataFrames
-    if isinstance(data, list):
-        group_dfs = {f"Group{i+1}": df for i, df in enumerate(data)}
-    else:
-        if group_col is None:
-            raise ValueError("group_col is required when data is a single DataFrame")
-        group_dfs = {
-            name: grp.drop(columns=[group_col]).reset_index(drop=True)
-            for name, grp in data.groupby(group_col)
-        }
-        # Pass group_col info to est_kwargs — but for list input to bootstrap worker
-        # we don't need group_col
-
-    group_labels = sorted(group_dfs.keys())
+    group_dfs = parse_group_data(data, group_col)
+    group_labels = list(group_dfs.keys())
 
     # Estimate original
     original = estimate_group_network(data, group_col=group_col, **est_kwargs)

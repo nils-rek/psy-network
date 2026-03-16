@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
@@ -73,9 +72,7 @@ class GroupNetwork:
         if not frames:
             return pd.DataFrame(columns=["group", "node1", "node2", "weight"])
 
-        # Include zero edges so all groups have the same edge set
-        result = pd.concat(frames, ignore_index=True)
-        return result
+        return pd.concat(frames, ignore_index=True)
 
     def plot(self, **kwargs) -> Figure:
         """Plot all group networks side by side."""

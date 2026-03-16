@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 import pandas as pd
 
@@ -11,10 +9,8 @@ from .._types import PenaltyType, SelectionCriterion
 from ..network import Network
 from ._jgl import joint_graphical_lasso
 from ._selection import select_lambdas
+from ._utils import parse_group_data
 from .network import GroupNetwork
-
-if TYPE_CHECKING:
-    pass
 
 
 def estimate_group_network(
@@ -70,18 +66,8 @@ def estimate_group_network(
     penalty = PenaltyType(penalty).value
     criterion = SelectionCriterion(criterion).value
 
-    # Parse input data into per-group DataFrames
-    if isinstance(data, list):
-        group_dfs = {f"Group{i+1}": df for i, df in enumerate(data)}
-    else:
-        if group_col is None:
-            raise ValueError("group_col is required when data is a single DataFrame")
-        group_dfs = {
-            name: grp.drop(columns=[group_col]).reset_index(drop=True)
-            for name, grp in data.groupby(group_col)
-        }
-
-    group_labels = sorted(group_dfs.keys())
+    group_dfs = parse_group_data(data, group_col)
+    group_labels = list(group_dfs.keys())
     var_names = list(group_dfs[group_labels[0]].columns)
 
     # Compute empirical covariance matrices

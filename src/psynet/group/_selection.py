@@ -84,8 +84,6 @@ def select_lambdas(
     tuple[float, float, list[np.ndarray]]
         Best (lambda1, lambda2, precision_matrices).
     """
-    p = S[0].shape[0]
-
     # Derive lambda_max from pooled off-diagonal maximum
     pooled = np.mean(S, axis=0)
     lambda1_max = np.max(np.abs(np.triu(pooled, k=1)))
