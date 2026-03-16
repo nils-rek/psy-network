@@ -198,9 +198,97 @@ boot = psynet.bootnet(data, n_boots=500, seed=1)
 psynet.plot_edge_accuracy(boot)
 ```
 
-### 5. Synthetic datasets
+### 5. Multi-group network estimation (Joint Graphical Lasso)
 
-PsyNet ships with two data generators useful for demos and testing:
+PsyNet supports estimating networks across multiple groups simultaneously using the Joint Graphical Lasso (JGL; [Danaher, Wang & Witten, 2014](https://doi.org/10.1111/rssb.12033)). This encourages shared structure across groups while allowing group-specific differences.
+
+Two penalty types are available:
+
+| Penalty | Description |
+|---|---|
+| `"fused"` | Penalizes differences in edge weights between groups — networks share similar edges |
+| `"group"` | Penalizes joint non-zeros across groups — networks share the same sparsity pattern |
+
+```python
+import psynet
+
+# Generate multi-group data (groups share ~70% of edges, differ in ~30%)
+data = psynet.make_multigroup(n_per_group=200, n_groups=2, p=9, seed=42)
+
+# Estimate group networks — lambda selection via EBIC by default
+gn = psynet.estimate_group_network(data, group_col="group", penalty="fused")
+
+# Or pass a list of DataFrames (one per group)
+# gn = psynet.estimate_group_network([df_group1, df_group2])
+```
+
+The result is a `GroupNetwork` object:
+
+```python
+gn["Group1"]          # access individual Network objects by group label
+gn.group_labels       # list of group names
+gn.lambda1            # selected sparsity penalty
+gn.lambda2            # selected similarity/fusion penalty
+
+gn.centrality()       # long-form DataFrame with centrality per group
+gn.compare_edges()    # long-form DataFrame comparing edges across groups
+```
+
+#### Tuning parameters
+
+Lambda selection is automatic by default (EBIC), but you can control the search:
+
+```python
+gn = psynet.estimate_group_network(
+    data,
+    group_col="group",
+    penalty="group",
+    criterion="ebic",          # "ebic", "bic", or "aic"
+    gamma=0.5,                 # EBIC sparsity tuning (higher = sparser)
+    search="sequential",       # "sequential" or "simultaneous" grid search
+    n_lambda1=30,              # grid size for λ₁
+    n_lambda2=30,              # grid size for λ₂
+)
+
+# Or supply lambdas directly to skip selection
+gn = psynet.estimate_group_network(data, group_col="group", lambda1=0.1, lambda2=0.05)
+```
+
+#### Visualization
+
+```python
+# Side-by-side network plots (shared layout for visual comparison)
+gn.plot(layout="spring", shared_layout=True)
+
+# Compare centrality across groups
+psynet.plot_group_centrality_comparison(gn, statistic="strength")
+```
+
+#### Bootstrap for group networks
+
+Assess edge accuracy with nonparametric bootstrap (resampling within each group):
+
+```python
+boot = psynet.bootnet_group(
+    data,
+    group_col="group",
+    n_boots=500,
+    n_cores=4,
+    seed=1,
+    penalty="fused",
+)
+
+# Summary with confidence intervals
+print(boot.summary(statistic="edge"))
+print(boot.summary(statistic="strength", group="Group1"))
+
+# Faceted edge accuracy plot (one panel per group)
+boot.plot_edge_accuracy()
+```
+
+### 6. Synthetic datasets
+
+PsyNet ships with data generators useful for demos and testing:
 
 ```python
 # Big Five personality (25 items: O1-O5, C1-C5, E1-E5, A1-A5, N1-N5)
@@ -208,9 +296,12 @@ bfi = psynet.make_bfi25(n=500, seed=42)    # 1–6 Likert scale
 
 # PHQ-9-like depression symptoms (dep1-dep9, three symptom clusters)
 phq = psynet.make_depression9(n=300, seed=123)  # 0–3 Likert scale
+
+# Multi-group data (groups with shared + differential edges)
+mg = psynet.make_multigroup(n_per_group=200, n_groups=2, p=9, seed=42)
 ```
 
-### 6. Extending PsyNet with custom estimators
+### 7. Extending PsyNet with custom estimators
 
 Add your own estimation method by decorating a class in `src/psynet/estimation/`:
 
