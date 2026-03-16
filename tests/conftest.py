@@ -40,3 +40,30 @@ def medium_data() -> pd.DataFrame:
     L = np.linalg.cholesky(cov)
     data = rng.standard_normal((n, p)) @ L.T
     return pd.DataFrame(data, columns=[f"X{i+1}" for i in range(p)])
+
+
+@pytest.fixture
+def two_group_data() -> pd.DataFrame:
+    """Two-group dataset (100 obs each, 5 variables, 'group' column)."""
+    rng = np.random.default_rng(99)
+    n, p = 100, 5
+
+    frames = []
+    for g in range(2):
+        # Slightly different correlation structures per group
+        cov = np.eye(p)
+        for i in range(p - 1):
+            val = 0.4 + g * 0.1 + rng.uniform(-0.05, 0.05)
+            cov[i, i + 1] = val
+            cov[i + 1, i] = val
+        # Ensure positive definite
+        eigvals = np.linalg.eigvalsh(cov)
+        if eigvals.min() < 0.01:
+            cov += (0.02 - eigvals.min()) * np.eye(p)
+        L = np.linalg.cholesky(cov)
+        data = rng.standard_normal((n, p)) @ L.T
+        df = pd.DataFrame(data, columns=[f"V{i+1}" for i in range(p)])
+        df["group"] = f"Group{g+1}"
+        frames.append(df)
+
+    return pd.concat(frames, ignore_index=True)

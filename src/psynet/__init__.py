@@ -10,8 +10,12 @@ from .plotting import (
     plot_edge_accuracy,
     plot_centrality_stability,
     plot_difference,
+    plot_group_networks,
+    plot_group_edge_accuracy,
+    plot_group_centrality_comparison,
 )
-from .datasets import make_bfi25, make_depression9
+from .datasets import make_bfi25, make_depression9, make_multigroup
+from .group import estimate_group_network, GroupNetwork, GroupBootstrapResult, bootnet_group
 
 __version__ = "0.1.0"
 
@@ -35,7 +39,16 @@ __all__ = [
     "plot_edge_accuracy",
     "plot_centrality_stability",
     "plot_difference",
+    "plot_group_networks",
+    "plot_group_edge_accuracy",
+    "plot_group_centrality_comparison",
+    # Group
+    "estimate_group_network",
+    "GroupNetwork",
+    "GroupBootstrapResult",
+    "bootnet_group",
     # Datasets
     "make_bfi25",
     "make_depression9",
+    "make_multigroup",
 ]

@@ -144,3 +144,85 @@ def make_depression9(n: int = 300, seed: int = 123) -> pd.DataFrame:
 
     columns = [f"dep{i}" for i in range(1, 10)]
     return pd.DataFrame(likert, columns=columns)
+
+
+def make_multigroup(
+    n_per_group: int = 200,
+    n_groups: int = 2,
+    p: int = 9,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Generate multi-group data with shared base structure.
+
+    Groups share ~70% of edges with the same correlation structure, and
+    ~30% of edges differ across groups. Useful for testing Joint Graphical
+    Lasso estimation.
+
+    Parameters
+    ----------
+    n_per_group : int
+        Number of observations per group.
+    n_groups : int
+        Number of groups.
+    p : int
+        Number of variables.
+    seed : int
+        Random seed.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with V1..Vp columns + ``'group'`` column.
+    """
+    rng = np.random.default_rng(seed)
+
+    # Build a shared base precision matrix (sparse)
+    base_prec = np.eye(p)
+    # Add some off-diagonal structure (banded + a few random entries)
+    for i in range(p - 1):
+        val = rng.uniform(0.2, 0.4)
+        base_prec[i, i + 1] = val
+        base_prec[i + 1, i] = val
+    if p > 3:
+        base_prec[0, p - 1] = 0.25
+        base_prec[p - 1, 0] = 0.25
+
+    frames = []
+    for g in range(n_groups):
+        # Create group-specific precision by modifying ~30% of off-diagonal entries
+        prec_g = base_prec.copy()
+        n_edges = p * (p - 1) // 2
+        n_diff = max(1, int(0.3 * n_edges))
+
+        # Pick random off-diagonal positions to modify
+        upper_idx = np.array([(i, j) for i in range(p) for j in range(i + 1, p)])
+        diff_idx = rng.choice(len(upper_idx), size=n_diff, replace=False)
+        for idx in diff_idx:
+            i, j = upper_idx[idx]
+            # Either add, remove, or change an edge
+            if prec_g[i, j] != 0:
+                new_val = rng.choice([0.0, rng.uniform(0.1, 0.5)])
+            else:
+                new_val = rng.choice([0.0, rng.uniform(0.15, 0.4)])
+            prec_g[i, j] = new_val
+            prec_g[j, i] = new_val
+
+        # Ensure positive definite
+        eigvals = np.linalg.eigvalsh(prec_g)
+        if eigvals.min() < 0.1:
+            prec_g += (0.15 - eigvals.min()) * np.eye(p)
+
+        # Generate data from this precision matrix
+        cov_g = np.linalg.inv(prec_g)
+        # Normalize to correlation
+        d = np.sqrt(np.diag(cov_g))
+        cov_g = cov_g / np.outer(d, d)
+
+        L = np.linalg.cholesky(cov_g)
+        data = rng.standard_normal((n_per_group, p)) @ L.T
+
+        df = pd.DataFrame(data, columns=[f"V{i+1}" for i in range(p)])
+        df["group"] = f"Group{g+1}"
+        frames.append(df)
+
+    return pd.concat(frames, ignore_index=True)

@@ -30,3 +30,16 @@ class Statistic(str, Enum):
     CLOSENESS = "closeness"
     BETWEENNESS = "betweenness"
     EXPECTED_INFLUENCE = "expectedInfluence"
+
+
+class PenaltyType(str, Enum):
+    """Joint Graphical Lasso penalty type."""
+    FUSED = "fused"
+    GROUP = "group"
+
+
+class SelectionCriterion(str, Enum):
+    """Information criterion for model selection."""
+    AIC = "aic"
+    BIC = "bic"
+    EBIC = "ebic"
