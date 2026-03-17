@@ -8,6 +8,7 @@ from .group_plot import (
     plot_group_edge_accuracy,
     plot_group_centrality_comparison,
 )
+from .ts_plot import plot_ts_networks
 
 __all__ = [
     "plot_network",
@@ -18,4 +19,5 @@ __all__ = [
     "plot_group_networks",
     "plot_group_edge_accuracy",
     "plot_group_centrality_comparison",
+    "plot_ts_networks",
 ]

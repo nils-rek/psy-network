@@ -286,7 +286,72 @@ print(boot.summary(statistic="strength", group="Group1"))
 boot.plot_edge_accuracy()
 ```
 
-### 6. Synthetic datasets
+### 6. Time-series network estimation (graphicalVAR)
+
+PsyNet supports time-series network analysis for intensive longitudinal data (e.g., ESM/EMA). This decomposes dynamics into two networks:
+
+| Network | Type | Description |
+|---|---|---|
+| **Temporal** | Directed | VAR(1) coefficients — how variables at *t-1* predict variables at *t* |
+| **Contemporaneous** | Undirected | Partial correlations of VAR residuals — same-timepoint associations after accounting for temporal effects |
+
+This mirrors R's [`graphicalVAR`](https://cran.r-project.org/package=graphicalVAR) package using a two-step approach: (1) sparse VAR via column-wise Lasso, (2) EBIC graphical lasso on residuals.
+
+```python
+import psynet
+
+# Generate synthetic VAR(1) time-series data
+data = psynet.make_var_data(n_timepoints=500, p=6, seed=42)
+
+# Estimate temporal + contemporaneous networks
+ts = psynet.estimate_var_network(data)
+```
+
+The result is a `TSNetwork` object:
+
+```python
+ts.temporal           # directed Network (VAR coefficients B)
+ts.contemporaneous    # undirected Network (partial correlations of residuals)
+ts.labels             # variable names
+ts.n_observations     # effective observations after lagging
+ts.n_timepoints       # original number of timepoints
+ts.n_nodes            # number of variables
+
+# Access adjacency matrices
+ts.temporal.adjacency_df       # labeled B matrix
+ts.contemporaneous.edges_df    # non-zero contemporaneous edges
+```
+
+#### Centrality for both networks
+
+```python
+cent = ts.centrality()
+# Returns DataFrame with columns: strength, closeness, betweenness,
+# expectedInfluence, network, node
+# 'network' column is "temporal" or "contemporaneous"
+```
+
+#### Visualization
+
+```python
+# Side-by-side plot: temporal (directed, with arrows) and contemporaneous (undirected)
+ts.plot(layout="spring")
+
+# Or call directly
+psynet.plot_ts_networks(ts, layout="circular")
+```
+
+#### ESM gap handling (beep/day)
+
+For experience sampling data with gaps between days, pass `beep` and `day` columns to exclude invalid lag pairs:
+
+```python
+# Data with beep (measurement within day) and day columns
+ts = psynet.estimate_var_network(data, beep="beep", day="day")
+# Only consecutive beeps within the same day are used for lagging
+```
+
+### 7. Synthetic datasets
 
 PsyNet ships with data generators useful for demos and testing:
 
@@ -299,9 +364,12 @@ phq = psynet.make_depression9(n=300, seed=123)  # 0–3 Likert scale
 
 # Multi-group data (groups with shared + differential edges)
 mg = psynet.make_multigroup(n_per_group=200, n_groups=2, p=9, seed=42)
+
+# VAR(1) time-series data (stationary process with sparse dynamics)
+ts_data = psynet.make_var_data(n_timepoints=500, p=6, seed=42)
 ```
 
-### 7. Extending PsyNet with custom estimators
+### 8. Extending PsyNet with custom estimators
 
 Add your own estimation method by decorating a class in `src/psynet/estimation/`:
 

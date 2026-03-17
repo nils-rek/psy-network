@@ -67,3 +67,10 @@ def two_group_data() -> pd.DataFrame:
         frames.append(df)
 
     return pd.concat(frames, ignore_index=True)
+
+
+@pytest.fixture
+def var_data() -> pd.DataFrame:
+    """Small VAR(1) time-series dataset (200 × 4) for time-series tests."""
+    from psynet.datasets import make_var_data
+    return make_var_data(n_timepoints=200, p=4, seed=42)

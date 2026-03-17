@@ -13,9 +13,11 @@ from .plotting import (
     plot_group_networks,
     plot_group_edge_accuracy,
     plot_group_centrality_comparison,
+    plot_ts_networks,
 )
-from .datasets import make_bfi25, make_depression9, make_multigroup
+from .datasets import make_bfi25, make_depression9, make_multigroup, make_var_data
 from .group import estimate_group_network, GroupNetwork, GroupBootstrapResult, bootnet_group
+from .timeseries import estimate_var_network, TSNetwork
 
 __version__ = "0.1.0"
 
@@ -47,8 +49,13 @@ __all__ = [
     "GroupNetwork",
     "GroupBootstrapResult",
     "bootnet_group",
+    # Time-series
+    "estimate_var_network",
+    "TSNetwork",
+    "plot_ts_networks",
     # Datasets
     "make_bfi25",
     "make_depression9",
     "make_multigroup",
+    "make_var_data",
 ]

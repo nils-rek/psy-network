@@ -226,3 +226,87 @@ def make_multigroup(
         frames.append(df)
 
     return pd.concat(frames, ignore_index=True)
+
+
+def make_var_data(
+    n_timepoints: int = 500,
+    p: int = 6,
+    *,
+    spectral_radius: float = 0.8,
+    sparsity: float = 0.5,
+    seed: int = 42,
+    burn_in: int = 200,
+) -> pd.DataFrame:
+    """Generate synthetic VAR(1) time-series data.
+
+    Creates data from a known VAR(1) process with a sparse transition
+    matrix B and sparse innovation covariance, useful for testing
+    time-series network estimation.
+
+    Parameters
+    ----------
+    n_timepoints : int
+        Number of timepoints to return (after burn-in).
+    p : int
+        Number of variables.
+    spectral_radius : float
+        Target spectral radius for B (must be < 1 for stationarity).
+    sparsity : float
+        Proportion of off-diagonal entries in B to zero out.
+    seed : int
+        Random seed.
+    burn_in : int
+        Number of burn-in samples to discard.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with V1..Vp columns, ``n_timepoints`` rows.
+    """
+    rng = np.random.default_rng(seed)
+
+    # Create sparse B matrix
+    B = rng.uniform(-0.3, 0.3, size=(p, p))
+    # Sparsify off-diagonal
+    mask = rng.random((p, p)) < sparsity
+    np.fill_diagonal(mask, False)  # keep diagonal
+    B[mask] = 0.0
+    # Set diagonal to small autoregressive values
+    np.fill_diagonal(B, rng.uniform(0.1, 0.3, size=p))
+
+    # Scale to target spectral radius
+    eigvals = np.linalg.eigvals(B)
+    current_radius = np.max(np.abs(eigvals))
+    if current_radius > 0:
+        B = B * (spectral_radius / current_radius)
+
+    # Create sparse innovation precision → covariance
+    prec = np.eye(p)
+    for i in range(p - 1):
+        val = rng.uniform(0.2, 0.4)
+        prec[i, i + 1] = val
+        prec[i + 1, i] = val
+    # Ensure positive definite
+    eigvals_p = np.linalg.eigvalsh(prec)
+    if eigvals_p.min() < 0.1:
+        prec += (0.15 - eigvals_p.min()) * np.eye(p)
+    sigma = np.linalg.inv(prec)
+    # Normalize to correlation-like scale
+    d = np.sqrt(np.diag(sigma))
+    sigma = sigma / np.outer(d, d)
+
+    L = np.linalg.cholesky(sigma)
+
+    # Simulate VAR(1) process
+    total = n_timepoints + burn_in
+    Y = np.zeros((total, p))
+    Y[0] = rng.standard_normal(p)
+    for t in range(1, total):
+        eps = rng.standard_normal(p) @ L.T
+        Y[t] = B @ Y[t - 1] + eps
+
+    # Discard burn-in
+    Y = Y[burn_in:]
+
+    columns = [f"V{i+1}" for i in range(p)]
+    return pd.DataFrame(Y, columns=columns)
