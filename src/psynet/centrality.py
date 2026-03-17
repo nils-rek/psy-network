@@ -13,14 +13,30 @@ if TYPE_CHECKING:
 
 
 def strength(net: Network) -> pd.Series:
-    """Sum of absolute edge weights per node."""
-    vals = np.sum(np.abs(net.adjacency), axis=1)
+    """Sum of absolute edge weights per node.
+
+    For directed networks, returns total strength (in-strength + out-strength).
+    For undirected networks (symmetric adjacency), this equals the row sum.
+    """
+    A = np.abs(net.adjacency)
+    if net.directed:
+        vals = np.sum(A, axis=0) + np.sum(A, axis=1)  # in + out
+    else:
+        vals = np.sum(A, axis=1)
     return pd.Series(vals, index=net.labels, name="strength")
 
 
 def expected_influence(net: Network) -> pd.Series:
-    """Sum of signed edge weights per node."""
-    vals = np.sum(net.adjacency, axis=1)
+    """Sum of signed edge weights per node.
+
+    For directed networks, returns total expected influence (in + out).
+    For undirected networks (symmetric adjacency), this equals the row sum.
+    """
+    A = net.adjacency
+    if net.directed:
+        vals = np.sum(A, axis=0) + np.sum(A, axis=1)  # in + out
+    else:
+        vals = np.sum(A, axis=1)
     return pd.Series(vals, index=net.labels, name="expectedInfluence")
 
 

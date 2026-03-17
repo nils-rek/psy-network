@@ -35,6 +35,42 @@ class TestStrength:
         np.testing.assert_almost_equal(s["C"], 0.5)
 
 
+    def test_directed_strength(self):
+        """For directed networks, strength = in-strength + out-strength."""
+        from psynet.network import Network
+        # Asymmetric adjacency: A[i,j] means edge from i to j
+        adj = np.array([
+            [0.0, 0.5, 0.0],
+            [0.0, 0.0, 0.3],
+            [0.2, 0.0, 0.0],
+        ])
+        net = Network(adj, ["A", "B", "C"], "test", 100, directed=True)
+        s = strength(net)
+        # A: out=0.5, in=0.2 → 0.7
+        # B: out=0.3, in=0.5 → 0.8
+        # C: out=0.2, in=0.3 → 0.5
+        np.testing.assert_almost_equal(s["A"], 0.7)
+        np.testing.assert_almost_equal(s["B"], 0.8)
+        np.testing.assert_almost_equal(s["C"], 0.5)
+
+    def test_directed_ei(self):
+        """For directed networks, EI = in-EI + out-EI."""
+        from psynet.network import Network
+        adj = np.array([
+            [0.0, 0.5, -0.3],
+            [0.0, 0.0, 0.2],
+            [0.1, 0.0, 0.0],
+        ])
+        net = Network(adj, ["A", "B", "C"], "test", 100, directed=True)
+        ei = expected_influence(net)
+        # A: out=0.5+(-0.3)=0.2, in=0.0+0.1=0.1 → 0.3
+        # B: out=0.2, in=0.5 → 0.7
+        # C: out=0.1, in=-0.3+0.2=-0.1 → 0.0
+        np.testing.assert_almost_equal(ei["A"], 0.3)
+        np.testing.assert_almost_equal(ei["B"], 0.7)
+        np.testing.assert_almost_equal(ei["C"], 0.0)
+
+
 class TestExpectedInfluence:
     def test_known_value(self):
         from psynet.network import Network

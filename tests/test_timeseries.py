@@ -46,6 +46,11 @@ class TestValidation:
         with pytest.raises(ValueError, match="not found"):
             validate_ts_data(var_data, beep="nonexistent")
 
+    def test_single_variable_raises(self):
+        df = pd.DataFrame({"V1": [1.0, 2.0, 3.0]})
+        with pytest.raises(ValueError, match="at least 2 variable"):
+            validate_ts_data(df)
+
 
 # ── Lag Matrix ──────────────────────────────────────────────────────
 
@@ -63,6 +68,19 @@ class TestLagMatrix:
         # X[t] should be data[t], Y[t] should be data[t+1]
         np.testing.assert_array_equal(X[0], var_data[cols].iloc[0].values)
         np.testing.assert_array_equal(Y[0], var_data[cols].iloc[1].values)
+
+    def test_beep_only_consecutive(self):
+        """Beep-only (no day) should use consecutive beeps."""
+        df = pd.DataFrame({
+            "V1": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "V2": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "beep": [1, 2, 5, 6, 7],  # gap between beep 2 and 5
+        })
+        cols = ["V1", "V2"]
+        X, Y = make_lag_matrix(df, cols, beep="beep")
+        # Valid pairs: (row0→1), (row2→3), (row3→4) — row1→2 has gap
+        assert X.shape[0] == 3
+        assert Y.shape[0] == 3
 
     def test_beep_day_gap_handling(self):
         """Observations across day boundaries should be excluded."""
@@ -158,6 +176,16 @@ class TestEstimateVarNetwork:
         assert "network" in cent.columns
         assert set(cent["network"].unique()) == {"temporal", "contemporaneous"}
 
+    def test_temporal_centrality_directed(self, var_data):
+        """Temporal network centrality should work on directed network."""
+        ts = estimate_var_network(var_data, cv=3, n_lambda=20)
+        cent = ts.temporal.centrality()
+        assert isinstance(cent, pd.DataFrame)
+        assert "strength" in cent.columns
+        assert len(cent) == ts.n_nodes
+        # Directed strength = in + out, should be >= 0
+        assert np.all(cent["strength"] >= 0)
+
 
 # ── make_var_data ───────────────────────────────────────────────────
 
@@ -175,6 +203,14 @@ class TestMakeVarData:
         """Generated data should be finite (non-exploding)."""
         df = make_var_data(n_timepoints=1000, p=6)
         assert np.all(np.isfinite(df.values))
+
+    def test_recoverable_signal(self):
+        """Generated data should have recoverable temporal structure."""
+        df = make_var_data(n_timepoints=500, p=4, seed=42)
+        ts = estimate_var_network(df, cv=3, n_lambda=50)
+        # Temporal network should have at least some non-zero edges
+        n_temporal_edges = np.count_nonzero(ts.temporal.adjacency)
+        assert n_temporal_edges > 0
 
     def test_integrates_with_estimation(self):
         df = make_var_data(n_timepoints=200, p=4, seed=99)

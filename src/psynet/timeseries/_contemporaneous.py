@@ -7,19 +7,8 @@ import warnings
 import numpy as np
 from sklearn.covariance import GraphicalLasso
 
+from .._glasso_utils import _ebic
 from ..network import Network
-
-
-def _ebic(precision: np.ndarray, cov: np.ndarray, n: int, gamma: float) -> float:
-    """Compute Extended BIC for a given precision matrix."""
-    p = precision.shape[0]
-    sign, logdet = np.linalg.slogdet(precision)
-    if sign <= 0:
-        return np.inf
-    loglik = (n / 2) * (logdet - np.trace(cov @ precision))
-    upper = np.triu(precision, k=1)
-    n_edges = np.count_nonzero(upper)
-    return -2 * loglik + n_edges * np.log(n) + 4 * n_edges * gamma * np.log(p)
 
 
 def estimate_contemporaneous(

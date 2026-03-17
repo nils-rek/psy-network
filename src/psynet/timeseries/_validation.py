@@ -45,8 +45,10 @@ def validate_ts_data(
 
     var_cols = [c for c in data.columns if c not in exclude]
 
-    if len(var_cols) == 0:
-        raise ValueError("No variable columns found in data")
+    if len(var_cols) < 2:
+        raise ValueError(
+            f"Need at least 2 variable columns for VAR estimation, got {len(var_cols)}"
+        )
 
     if len(data) < 2:
         raise ValueError(

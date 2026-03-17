@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ._drawing import _draw_network_on_ax
+
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
     from ..group.network import GroupNetwork
@@ -89,43 +91,6 @@ def plot_group_networks(
     )
     fig.tight_layout()
     return fig
-
-
-def _draw_network_on_ax(net, ax, pos, **kwargs):
-    """Draw a network on given axes with pre-computed positions."""
-    import networkx as nx
-
-    node_color = kwargs.get("node_color", "#87CEEB")
-    edge_color_pos = kwargs.get("edge_color_pos", "#2166AC")
-    edge_color_neg = kwargs.get("edge_color_neg", "#B2182B")
-    max_edge_width = kwargs.get("max_edge_width", 3.0)
-    min_edge_width = kwargs.get("min_edge_width", 0.3)
-    font_size = kwargs.get("font_size", 8)
-    node_size = kwargs.get("node_size", 300)
-
-    G = net.to_networkx()
-
-    nx.draw_networkx_nodes(
-        G, pos, ax=ax, node_size=node_size, node_color=node_color,
-        edgecolors="#333333", linewidths=1.0,
-    )
-    nx.draw_networkx_labels(G, pos, ax=ax, font_size=font_size, font_weight="bold")
-
-    edges = list(G.edges(data=True))
-    if edges:
-        weights = np.array([abs(d["weight"]) for _, _, d in edges])
-        max_w = weights.max() if weights.max() > 0 else 1.0
-        widths = min_edge_width + (weights / max_w) * (max_edge_width - min_edge_width)
-
-        for (u, v, d), w in zip(edges, widths):
-            color = edge_color_pos if d["weight"] >= 0 else edge_color_neg
-            style = "solid" if d["weight"] >= 0 else "dashed"
-            nx.draw_networkx_edges(
-                G, pos, edgelist=[(u, v)], ax=ax,
-                width=float(w), edge_color=color, style=style, alpha=0.7,
-            )
-
-    ax.axis("off")
 
 
 def plot_group_edge_accuracy(

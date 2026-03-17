@@ -266,13 +266,13 @@ def make_var_data(
     rng = np.random.default_rng(seed)
 
     # Create sparse B matrix
-    B = rng.uniform(-0.3, 0.3, size=(p, p))
+    B = rng.uniform(-0.5, 0.5, size=(p, p))
     # Sparsify off-diagonal
     mask = rng.random((p, p)) < sparsity
     np.fill_diagonal(mask, False)  # keep diagonal
     B[mask] = 0.0
     # Set diagonal to small autoregressive values
-    np.fill_diagonal(B, rng.uniform(0.1, 0.3, size=p))
+    np.fill_diagonal(B, rng.uniform(0.2, 0.5, size=p))
 
     # Scale to target spectral radius
     eigvals = np.linalg.eigvals(B)
