@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from ._types import AdjacencyMatrix
+from .estimation_info import EstimationInfo
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -35,6 +36,8 @@ class Network:
         Whether negative edges are allowed.
     directed : bool
         Whether the network is directed.
+    estimation_info : EstimationInfo | None
+        Estimation diagnostics and metadata (lambda, EBIC curve, etc.).
     """
 
     adjacency: AdjacencyMatrix
@@ -44,6 +47,7 @@ class Network:
     weighted: bool = True
     signed: bool = True
     directed: bool = False
+    estimation_info: EstimationInfo | None = None
     # Derived (computed post-init)
     n_nodes: int = field(init=False)
 

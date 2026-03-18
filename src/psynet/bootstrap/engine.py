@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import warnings
+
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
@@ -10,7 +13,10 @@ from scipy.stats import spearmanr
 from .._types import BootstrapType, Statistic
 from ..centrality import strength, expected_influence, closeness, betweenness
 from ..estimation import estimate_network
+from ..network import Network
 from .results import BootstrapResult
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_statistics(
@@ -128,9 +134,10 @@ def bootnet(
     *,
     n_boots: int = 1000,
     boot_type: str | BootstrapType = "nonparametric",
-    method: str = "EBICglasso",
+    method: str | None = None,
+    network: Network | None = None,
     statistics: list[str] | None = None,
-    n_cores: int = 1,
+    n_cores: int = -1,
     case_min: float = 0.25,
     case_max: float = 0.75,
     case_n: int = 10,
@@ -149,14 +156,22 @@ def bootnet(
     boot_type : str or BootstrapType
         ``"nonparametric"`` for edge/centrality accuracy or ``"case"`` for
         centrality stability (case-dropping).
-    method : str
+    method : str | None
         Estimation method name (passed to ``estimate_network``).
+        Defaults to ``"EBICglasso"`` unless ``network`` is provided,
+        in which case the method is inherited from the network.
+    network : Network | None
+        A previously estimated network. When provided, the bootstrap
+        inherits the estimation method and keyword arguments from the
+        network's ``estimation_info``.  Explicit ``method`` / ``est_kwargs``
+        override inherited values (with a warning on conflict).
     statistics : list[str] | None
         Statistics to extract. Defaults to ``["edge", "strength",
         "closeness", "betweenness", "expectedInfluence"]`` for
         nonparametric and centrality measures for case-dropping.
     n_cores : int
-        Number of parallel workers (joblib).
+        Number of parallel workers (joblib).  ``-1`` (default) uses all
+        available cores.
     case_min, case_max : float
         Proportion range for case-dropping bootstrap.
     case_n : int
@@ -174,6 +189,31 @@ def bootnet(
     """
     boot_type = BootstrapType(boot_type)
     rng = np.random.default_rng(seed)
+
+    # --- Resolve method and est_kwargs from network if provided (R4) ---
+    if network is not None and network.estimation_info is not None:
+        net_info = network.estimation_info
+        # Inherit method
+        if method is None:
+            method = net_info.method
+        # Inherit est_kwargs, with user overrides
+        inherited_kwargs = dict(net_info.est_kwargs)
+        if est_kwargs:
+            for key, val in est_kwargs.items():
+                if key in inherited_kwargs and inherited_kwargs[key] != val:
+                    warnings.warn(
+                        f"bootnet kwarg {key!r}={val!r} overrides network's "
+                        f"estimation_info value {inherited_kwargs[key]!r}",
+                        stacklevel=2,
+                    )
+            inherited_kwargs.update(est_kwargs)
+        est_kwargs = inherited_kwargs
+
+    # Fall back to default method
+    if method is None:
+        method = "EBICglasso"
+
+    logger.info("bootnet: method=%s, est_kwargs=%s", method, est_kwargs)
 
     # Estimate original network
     original = estimate_network(data, method=method, **est_kwargs)

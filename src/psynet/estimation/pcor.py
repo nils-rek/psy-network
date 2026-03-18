@@ -7,6 +7,7 @@ import pandas as pd
 from scipy import linalg
 
 from .._types import CorMethod
+from ..estimation_info import EstimationInfo
 from ..network import Network
 from ._registry import register
 
@@ -42,6 +43,15 @@ class PCorEstimator:
         pcor = _partial_correlations(cormat)
         if threshold > 0:
             pcor[np.abs(pcor) < threshold] = 0.0
+        info = EstimationInfo(
+            method=self.name,
+            est_kwargs={
+                "cor_method": cor_method.value,
+                "threshold": threshold,
+                **kwargs,
+            },
+            cor_matrix=cormat,
+        )
         return Network(
             adjacency=pcor,
             labels=list(data.columns),
@@ -50,4 +60,5 @@ class PCorEstimator:
             weighted=True,
             signed=True,
             directed=False,
+            estimation_info=info,
         )

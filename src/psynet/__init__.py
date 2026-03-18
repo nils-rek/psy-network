@@ -1,6 +1,7 @@
 """PsyNet — Psychometric network analysis toolkit for Python."""
 
 from .network import Network
+from .estimation_info import EstimationInfo
 from .estimation import estimate_network, available_methods
 from .centrality import centrality, strength, closeness, betweenness, expected_influence
 from .bootstrap import bootnet, BootstrapResult
@@ -24,6 +25,7 @@ __version__ = "0.1.0"
 __all__ = [
     # Core
     "Network",
+    "EstimationInfo",
     "estimate_network",
     "available_methods",
     # Centrality

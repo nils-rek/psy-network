@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from .._types import CorMethod
+from ..estimation_info import EstimationInfo
 from ..network import Network
 from ._registry import register
 
@@ -29,6 +30,15 @@ class CorEstimator:
         np.fill_diagonal(cormat, 0.0)
         if threshold > 0:
             cormat[np.abs(cormat) < threshold] = 0.0
+        info = EstimationInfo(
+            method=self.name,
+            est_kwargs={
+                "cor_method": cor_method.value,
+                "threshold": threshold,
+                **kwargs,
+            },
+            cor_matrix=cormat,
+        )
         return Network(
             adjacency=cormat,
             labels=list(data.columns),
@@ -37,4 +47,5 @@ class CorEstimator:
             weighted=True,
             signed=True,
             directed=False,
+            estimation_info=info,
         )
