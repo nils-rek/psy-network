@@ -102,6 +102,38 @@ class TestClosenessAndBetweenness:
         assert np.all(betweenness(net) >= 0)
 
 
+class TestNormalization:
+    """Test normalized parameter for closeness and betweenness."""
+
+    def test_closeness_unnormalized_smaller(self, small_data):
+        """Unnormalized closeness should be smaller by factor (n-1)."""
+        net = estimate_network(small_data, method="cor")
+        c_norm = closeness(net, normalized=True)
+        c_raw = closeness(net, normalized=False)
+        n = net.n_nodes
+        # normalized = raw * (n-1), so raw = normalized / (n-1)
+        np.testing.assert_allclose(c_raw * (n - 1), c_norm, rtol=1e-10)
+
+    def test_betweenness_unnormalized_larger(self, small_data):
+        """Unnormalized betweenness should be larger by normalization factor."""
+        net = estimate_network(small_data, method="cor")
+        b_norm = betweenness(net, normalized=True)
+        b_raw = betweenness(net, normalized=False)
+        n = net.n_nodes
+        # For undirected: normalized = raw * 2 / ((n-1)(n-2))
+        factor = 2.0 / ((n - 1) * (n - 2))
+        np.testing.assert_allclose(b_norm, b_raw * factor, rtol=1e-10)
+
+    def test_centrality_passes_normalized(self, small_data):
+        """centrality(normalized=False) should propagate to closeness/betweenness."""
+        net = estimate_network(small_data, method="cor")
+        df = centrality(net, normalized=False)
+        c_raw = closeness(net, normalized=False)
+        b_raw = betweenness(net, normalized=False)
+        pd.testing.assert_series_equal(df["closeness"], c_raw, check_names=False)
+        pd.testing.assert_series_equal(df["betweenness"], b_raw, check_names=False)
+
+
 class TestCentrality:
     def test_returns_dataframe(self, small_data):
         net = estimate_network(small_data, method="cor")

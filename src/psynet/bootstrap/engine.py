@@ -271,11 +271,17 @@ def bootnet(
             s: func_map[s](original) for s in centrality_stats
         }
 
-        proportions = np.linspace(case_max, case_min, case_n)
-        seeds = rng.integers(0, 2**31, size=n_boots * case_n)
+        # Derive proportions from integer sample sizes to match R's bootnet
+        n = len(data)
+        raw_props = np.linspace(case_max, case_min, case_n)
+        n_keeps = np.clip(np.floor(n * raw_props).astype(int), 3, n)
+        proportions = np.unique(n_keeps)[::-1] / n  # deduplicate, descending
+        n_prop_steps = len(proportions)
+
+        seeds = rng.integers(0, 2**31, size=n_boots * n_prop_steps)
 
         if verbose:
-            print(f"Running case-dropping bootstrap ({n_boots} boots × {case_n} proportions)...")
+            print(f"Running case-dropping bootstrap ({n_boots} boots × {n_prop_steps} proportions)...")
 
         tasks = []
         seed_idx = 0

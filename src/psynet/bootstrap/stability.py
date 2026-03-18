@@ -23,6 +23,10 @@ def cs_coefficient(
     can be dropped such that, with probability ≥ (1 - quantile), the
     correlation between original and subsample centralities remains ≥ threshold.
 
+    Uses a proportion-of-samples method matching R's ``corStability()``:
+    for each drop proportion, the fraction of bootstrap correlations
+    exceeding *threshold* must be ≥ ``1 - quantile``.
+
     Parameters
     ----------
     boot_result : BootstrapResult
@@ -32,7 +36,8 @@ def cs_coefficient(
     threshold : float
         Minimum acceptable correlation (default 0.7).
     quantile : float
-        Quantile for the lower bound (default 0.05, i.e. 95% confidence).
+        Significance level (default 0.05). The proportion of bootstrap
+        samples with correlation above *threshold* must be ≥ ``1 - quantile``.
 
     Returns
     -------
@@ -56,8 +61,8 @@ def cs_coefficient(
         prop_corrs = sub[sub["proportion"] == prop]["correlation"].dropna()
         if len(prop_corrs) == 0:
             continue
-        lower_bound = np.quantile(prop_corrs, quantile)
-        if lower_bound >= threshold:
+        p_above = np.mean(prop_corrs > threshold)
+        if p_above >= (1 - quantile):
             # proportion is fraction *retained*, so dropped = 1 - prop
             best_prop = max(best_prop, 1.0 - prop)
 
