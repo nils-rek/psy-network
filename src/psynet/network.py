@@ -102,6 +102,18 @@ class Network:
         from .centrality import centrality
         return centrality(self)
 
+    def communities(self, method: str = "walktrap", **kwargs) -> pd.Series:
+        """Detect communities; delegates to :mod:`psynet.community`."""
+        from .community import communities
+        return communities(self, method=method, **kwargs)
+
+    def plot_communities(self, method: str = "walktrap", **kwargs) -> Figure:
+        """Plot network colored by community membership."""
+        from .community import communities as detect
+        from .plotting import plot_community
+        comm = detect(self, method=method)
+        return plot_community(self, comm, **kwargs)
+
     def plot(self, **kwargs) -> Figure:
         """Plot the network; delegates to :func:`psynet.plotting.plot_network`."""
         from .plotting import plot_network

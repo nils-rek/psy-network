@@ -107,7 +107,59 @@ Visualize centrality with a dot plot:
 psynet.plot_centrality(net, standardized=True)
 ```
 
-### 3. Bootstrap analysis
+### 3. Community detection
+
+Community detection identifies clusters of closely related nodes — a network-based alternative to factor analysis. PsyNet implements the three algorithms recommended by [Christensen et al. (2023)](https://doi.org/10.3758/s13428-023-02106-4) for psychological data:
+
+| Method | Description |
+|---|---|
+| `"walktrap"` | Random-walk based clustering (default) — deterministic, no igraph dependency |
+| `"louvain"` | Louvain modularity optimization |
+| `"greedy_modularity"` | Fast greedy modularity maximization |
+
+```python
+import psynet
+
+data = psynet.make_bfi25(n=500, seed=42)
+net = psynet.estimate_network(data)
+
+# Detect communities (walktrap by default)
+comm = net.communities()
+print(comm.value_counts())
+# Expected: ~5 communities for Big Five data
+
+# Use a specific algorithm
+comm_louv = psynet.louvain(net, resolution=1.0, seed=42)
+comm_greedy = psynet.greedy_modularity(net)
+
+# Or via the dispatcher
+comm_wt = psynet.communities(net, method="walktrap", steps=4)
+```
+
+All functions return a `pd.Series` mapping node labels to integer community IDs.
+
+#### Community visualization
+
+Plot the network with nodes colored by community membership:
+
+```python
+# Via Network convenience method
+net.plot_communities()
+
+# Or directly with customization
+from psynet import plot_community
+fig = plot_community(
+    net, comm,
+    layout="spring",
+    palette=["#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00"],
+    title="Big Five Communities",
+)
+fig.savefig("communities.png", dpi=150, bbox_inches="tight")
+```
+
+**Negative edges:** By default, absolute edge weights are used for community detection (`absolute_weights=True`), which is standard practice for signed psychometric networks.
+
+### 4. Bootstrap analysis
 
 Bootstrap analysis lets you assess the accuracy and stability of your network. PsyNet supports two types:
 
@@ -172,7 +224,7 @@ psynet.plot_difference(boot_case, statistic="strength")
 
 A CS-coefficient ≥ 0.5 is considered acceptable and ≥ 0.7 is good (see [Epskamp, Borsboom & Fried, 2018](https://doi.org/10.3758/s13428-017-0862-1)).
 
-### 4. Visualization
+### 5. Visualization
 
 ```python
 import psynet
@@ -193,12 +245,12 @@ fig.savefig("network.png", dpi=150, bbox_inches="tight")
 # Centrality dot plot
 psynet.plot_centrality(net, measures=["strength", "expectedInfluence"])
 
-# Bootstrap plots (see §3 above)
+# Bootstrap plots (see §4 above)
 boot = psynet.bootnet(data, n_boots=500, seed=1)
 psynet.plot_edge_accuracy(boot)
 ```
 
-### 5. Multi-group network estimation (Joint Graphical Lasso)
+### 6. Multi-group network estimation (Joint Graphical Lasso)
 
 PsyNet supports estimating networks across multiple groups simultaneously using the Joint Graphical Lasso (JGL; [Danaher, Wang & Witten, 2014](https://doi.org/10.1111/rssb.12033)). This encourages shared structure across groups while allowing group-specific differences.
 
@@ -286,7 +338,7 @@ print(boot.summary(statistic="strength", group="Group1"))
 boot.plot_edge_accuracy()
 ```
 
-### 6. Time-series network estimation (graphicalVAR)
+### 7. Time-series network estimation (graphicalVAR)
 
 PsyNet supports time-series network analysis for intensive longitudinal data (e.g., ESM/EMA). This decomposes dynamics into two networks:
 
@@ -351,7 +403,7 @@ ts = psynet.estimate_var_network(data, beep="beep", day="day")
 # Only consecutive beeps within the same day are used for lagging
 ```
 
-### 7. Synthetic datasets
+### 8. Synthetic datasets
 
 PsyNet ships with data generators useful for demos and testing:
 
@@ -369,7 +421,7 @@ mg = psynet.make_multigroup(n_per_group=200, n_groups=2, p=9, seed=42)
 ts_data = psynet.make_var_data(n_timepoints=500, p=6, seed=42)
 ```
 
-### 8. Extending PsyNet with custom estimators
+### 9. Extending PsyNet with custom estimators
 
 Add your own estimation method by decorating a class in `src/psynet/estimation/`:
 
