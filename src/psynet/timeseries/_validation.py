@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .._validation_utils import _find_valid_lag_indices, _validate_var_columns
+
 
 def validate_ts_data(
     data: pd.DataFrame,
@@ -43,26 +45,12 @@ def validate_ts_data(
             raise ValueError(f"day column {day!r} not found in data")
         exclude.add(day)
 
-    var_cols = [c for c in data.columns if c not in exclude]
-
-    if len(var_cols) < 2:
-        raise ValueError(
-            f"Need at least 2 variable columns for VAR estimation, got {len(var_cols)}"
-        )
+    var_cols = _validate_var_columns(data, exclude)
 
     if len(data) < 2:
         raise ValueError(
             f"Need at least 2 timepoints, got {len(data)}"
         )
-
-    # Check numeric
-    var_data = data[var_cols]
-    if not var_data.apply(pd.api.types.is_numeric_dtype).all():
-        raise ValueError("All variable columns must be numeric")
-
-    # Check NaN
-    if var_data.isna().any().any():
-        raise ValueError("Data contains NaN values; remove or impute before estimation")
 
     return var_cols
 
@@ -96,34 +84,15 @@ def make_lag_matrix(
     """
     values = data[var_cols].values
 
-    if beep is not None and day is not None:
-        # Only include pairs where day is the same and beep is consecutive
-        beep_vals = data[beep].values
-        day_vals = data[day].values
-        valid = []
-        for t in range(len(data) - 1):
-            if day_vals[t] == day_vals[t + 1] and beep_vals[t + 1] - beep_vals[t] == 1:
-                valid.append(t)
-        valid = np.array(valid)
-        if len(valid) == 0:
-            raise ValueError("No valid consecutive observation pairs found")
-        X = values[valid]
-        Y = values[valid + 1]
-    elif beep is not None:
-        # Use beep only: consecutive beeps
-        beep_vals = data[beep].values
-        valid = []
-        for t in range(len(data) - 1):
-            if beep_vals[t + 1] - beep_vals[t] == 1:
-                valid.append(t)
-        valid = np.array(valid)
-        if len(valid) == 0:
-            raise ValueError("No valid consecutive observation pairs found")
-        X = values[valid]
-        Y = values[valid + 1]
-    else:
-        # Simple: all consecutive pairs
-        X = values[:-1]
-        Y = values[1:]
+    beep_vals = data[beep].values if beep is not None else None
+    day_vals = data[day].values if day is not None else None
+
+    valid = _find_valid_lag_indices(len(data), beep_vals, day_vals)
+
+    if beep_vals is not None and len(valid) == 0:
+        raise ValueError("No valid consecutive observation pairs found")
+
+    X = values[valid]
+    Y = values[valid + 1]
 
     return X, Y

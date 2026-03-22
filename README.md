@@ -403,7 +403,62 @@ ts = psynet.estimate_var_network(data, beep="beep", day="day")
 # Only consecutive beeps within the same day are used for lagging
 ```
 
-### 8. Synthetic datasets
+### 8. Multilevel VAR network estimation (mlVAR)
+
+For multi-subject ESM/EMA data, PsyNet estimates multilevel VAR networks that decompose dynamics into three layers — mirroring R's [`mlVAR`](https://cran.r-project.org/package=mlVAR) package:
+
+| Network | Type | Description |
+|---|---|---|
+| **Temporal** | Directed | Fixed-effect VAR(1) coefficients from mixed-effects models |
+| **Contemporaneous** | Undirected | EBIC-glasso on pooled residuals across subjects |
+| **Between-subjects** | Undirected | EBIC-glasso on subject-level means |
+
+```python
+import psynet
+
+# Generate synthetic multilevel VAR data (20 subjects, 50 timepoints each)
+data = psynet.make_mlvar_data(n_subjects=20, n_timepoints=50, p=4, seed=42)
+
+# Estimate all three networks
+mlvar = psynet.estimate_mlvar_network(data, subject="subject", beep="beep")
+```
+
+The result is an `MLVARNetwork` object:
+
+```python
+mlvar.temporal            # directed Network (fixed-effect VAR coefficients)
+mlvar.contemporaneous     # undirected Network (partial correlations of residuals)
+mlvar.between_subjects    # undirected Network (between-subject partial correlations)
+mlvar.subject_temporal    # dict of per-subject directed Networks
+mlvar.pvalues             # p-values for temporal fixed effects
+mlvar.labels              # variable names
+mlvar.subject_ids         # list of subject identifiers
+
+# Centrality across all three networks
+cent = mlvar.centrality()
+```
+
+#### Visualization
+
+```python
+# Three-panel plot: temporal, contemporaneous, between-subjects
+mlvar.plot(layout="spring")
+
+# Or call directly
+psynet.plot_mlvar_networks(mlvar, layout="circular")
+```
+
+#### ESM gap handling
+
+For data with day boundaries, pass `beep` and `day` columns to exclude invalid cross-day lag pairs:
+
+```python
+mlvar = psynet.estimate_mlvar_network(data, subject="subject", beep="beep", day="day")
+```
+
+**Note:** mlVAR requires `statsmodels` (optional dependency) for mixed-effects model estimation.
+
+### 9. Synthetic datasets
 
 PsyNet ships with data generators useful for demos and testing:
 
@@ -419,9 +474,12 @@ mg = psynet.make_multigroup(n_per_group=200, n_groups=2, p=9, seed=42)
 
 # VAR(1) time-series data (stationary process with sparse dynamics)
 ts_data = psynet.make_var_data(n_timepoints=500, p=6, seed=42)
+
+# Multilevel VAR data (multiple subjects with random effects on B matrix)
+mlvar_data = psynet.make_mlvar_data(n_subjects=20, n_timepoints=50, p=4, seed=42)
 ```
 
-### 9. Extending PsyNet with custom estimators
+### 10. Extending PsyNet with custom estimators
 
 Add your own estimation method by decorating a class in `src/psynet/estimation/`:
 

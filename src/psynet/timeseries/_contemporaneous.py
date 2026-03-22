@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import warnings
-
 import numpy as np
-from sklearn.covariance import GraphicalLasso
 
-from .._glasso_utils import _ebic
+from .._glasso_utils import _fit_ebic_glasso
 from ..network import Network
 
 
@@ -47,47 +44,15 @@ def estimate_contemporaneous(
         Undirected contemporaneous network.
     """
     T, p = residuals.shape
-
-    # Correlation matrix of residuals
     cormat = np.corrcoef(residuals, rowvar=False)
 
-    # Lambda grid
-    lambda_max = np.max(np.abs(np.triu(cormat, k=1)))
-    lambda_min = lambda_max * lambda_min_ratio
-    lambdas = np.logspace(np.log10(lambda_max), np.log10(lambda_min), n_lambda)
-
-    best_ebic = np.inf
-    best_precision = None
-
-    for alpha in lambdas:
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                gl = GraphicalLasso(
-                    alpha=alpha,
-                    covariance="precomputed",
-                    max_iter=500,
-                    tol=1e-4,
-                )
-                gl.fit(cormat)
-            precision = gl.precision_
-            score = _ebic(precision, cormat, T, gamma)
-            if score < best_ebic:
-                best_ebic = score
-                best_precision = precision
-        except Exception:
-            continue
-
-    if best_precision is None:
-        raise RuntimeError(
-            "GraphicalLasso failed to converge at all lambda values for residuals"
-        )
-
-    # Convert precision to partial correlations
-    diag = np.sqrt(np.diag(best_precision))
-    pcor = -best_precision / np.outer(diag, diag)
-    np.fill_diagonal(pcor, 0.0)
-    pcor[np.abs(pcor) < threshold] = 0.0
+    pcor, _, _, _ = _fit_ebic_glasso(
+        cormat, T,
+        gamma=gamma,
+        n_lambda=n_lambda,
+        lambda_min_ratio=lambda_min_ratio,
+        threshold=threshold,
+    )
 
     return Network(
         adjacency=pcor,
