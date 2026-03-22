@@ -337,7 +337,7 @@ def make_var_data(
     return pd.DataFrame(Y, columns=columns)
 
 
-def make_mlvar_data(
+def make_multilevel_data(
     n_subjects: int = 20,
     n_timepoints: int = 50,
     p: int = 4,

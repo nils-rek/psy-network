@@ -8,7 +8,7 @@ import pandas as pd
 from .._validation_utils import _find_valid_lag_indices, _validate_var_columns
 
 
-def validate_mlvar_data(
+def validate_multilevel_data(
     data: pd.DataFrame,
     subject: str,
     *,
@@ -70,7 +70,7 @@ def validate_mlvar_data(
     return var_cols
 
 
-def make_mlvar_lag_data(
+def make_multilevel_lag_data(
     data: pd.DataFrame,
     var_cols: list[str],
     subject: str,

@@ -1,4 +1,4 @@
-"""Multilevel VAR (mlVAR) network estimation."""
+"""Multilevel VAR network estimation for multi-subject ESM data."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ import pandas as pd
 
 from ..network import Network
 from ._between import estimate_between_subjects
-from ._contemporaneous import estimate_mlvar_contemporaneous
-from ._temporal import estimate_mlvar_temporal
-from ._validation import make_mlvar_lag_data, validate_mlvar_data
-from .network import MLVARNetwork
+from ._contemporaneous import estimate_multilevel_contemporaneous
+from ._temporal import estimate_multilevel_temporal
+from ._validation import make_multilevel_lag_data, validate_multilevel_data
+from .network import MultilevelNetwork
 
 
-def estimate_mlvar_network(
+def estimate_multilevel_network(
     data: pd.DataFrame,
     subject: str,
     *,
@@ -24,7 +24,7 @@ def estimate_mlvar_network(
     lambda_min_ratio: float = 0.01,
     threshold: float = 1e-4,
     n_cores: int = 1,
-) -> MLVARNetwork:
+) -> MultilevelNetwork:
     """Estimate a multilevel VAR network from ESM data.
 
     Produces three networks:
@@ -56,13 +56,13 @@ def estimate_mlvar_network(
 
     Returns
     -------
-    MLVARNetwork
+    MultilevelNetwork
     """
-    var_cols = validate_mlvar_data(data, subject, beep=beep, day=day)
-    lag_data = make_mlvar_lag_data(data, var_cols, subject, beep=beep, day=day)
+    var_cols = validate_multilevel_data(data, subject, beep=beep, day=day)
+    lag_data = make_multilevel_lag_data(data, var_cols, subject, beep=beep, day=day)
 
     # Step 1: Temporal network via mixed-effects models
-    temporal_result = estimate_mlvar_temporal(
+    temporal_result = estimate_multilevel_temporal(
         lag_data, var_cols, subject, n_cores=n_cores,
     )
 
@@ -97,7 +97,7 @@ def estimate_mlvar_network(
         )
 
     # Step 2: Contemporaneous network from pooled residuals
-    contemporaneous_net = estimate_mlvar_contemporaneous(
+    contemporaneous_net = estimate_multilevel_contemporaneous(
         temporal_result.residuals_df, var_cols, subject,
         gamma=gamma,
         n_lambda=n_lambda,
@@ -114,7 +114,7 @@ def estimate_mlvar_network(
         threshold=threshold,
     )
 
-    return MLVARNetwork(
+    return MultilevelNetwork(
         temporal=temporal_net,
         contemporaneous=contemporaneous_net,
         between_subjects=between_net,
@@ -128,6 +128,6 @@ def estimate_mlvar_network(
 
 
 __all__ = [
-    "estimate_mlvar_network",
-    "MLVARNetwork",
+    "estimate_multilevel_network",
+    "MultilevelNetwork",
 ]

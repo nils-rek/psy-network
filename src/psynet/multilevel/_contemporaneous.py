@@ -1,4 +1,4 @@
-"""Contemporaneous network estimation from pooled mlVAR residuals."""
+"""Contemporaneous network estimation from pooled multilevel VAR residuals."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from .._glasso_utils import _fit_ebic_glasso
 from ..network import Network
 
 
-def estimate_mlvar_contemporaneous(
+def estimate_multilevel_contemporaneous(
     residuals_df,
     var_cols: list[str],
     subject: str,

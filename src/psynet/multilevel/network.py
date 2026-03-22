@@ -1,4 +1,4 @@
-"""MLVARNetwork dataclass — wraps temporal, contemporaneous, and between-subjects networks."""
+"""MultilevelNetwork dataclass — wraps temporal, contemporaneous, and between-subjects networks."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class MLVARNetwork:
+class MultilevelNetwork:
     """Immutable container for a multilevel VAR network result.
 
     Parameters
@@ -99,5 +99,5 @@ class MLVARNetwork:
 
     def plot(self, **kwargs) -> Figure:
         """Plot all three networks side by side."""
-        from ..plotting.mlvar_plot import plot_mlvar_networks
-        return plot_mlvar_networks(self, **kwargs)
+        from ..plotting.multilevel_plot import plot_multilevel_networks
+        return plot_multilevel_networks(self, **kwargs)

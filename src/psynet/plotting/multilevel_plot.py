@@ -8,11 +8,11 @@ from ._drawing import _plot_network_panels
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
-    from ..mlvar.network import MLVARNetwork
+    from ..multilevel.network import MultilevelNetwork
 
 
-def plot_mlvar_networks(
-    mlvar_net: MLVARNetwork,
+def plot_multilevel_networks(
+    ml_net: MultilevelNetwork,
     *,
     layout: str = "spring",
     shared_layout: bool = True,
@@ -24,7 +24,7 @@ def plot_mlvar_networks(
 
     Parameters
     ----------
-    mlvar_net : MLVARNetwork
+    ml_net : MultilevelNetwork
         Multilevel VAR network result.
     layout : str
         Layout algorithm (``"spring"``, ``"circular"``, ``"kamada_kawai"``).
@@ -45,15 +45,15 @@ def plot_mlvar_networks(
         figsize = (18, 6)
 
     panels = [
-        ("Temporal", mlvar_net.temporal, True),
-        ("Contemporaneous", mlvar_net.contemporaneous, False),
-        ("Between-Subjects", mlvar_net.between_subjects, False),
+        ("Temporal", ml_net.temporal, True),
+        ("Contemporaneous", ml_net.contemporaneous, False),
+        ("Between-Subjects", ml_net.between_subjects, False),
     ]
 
     return _plot_network_panels(
         panels,
         layout=layout,
-        layout_network=mlvar_net.contemporaneous,
+        layout_network=ml_net.contemporaneous,
         figsize=figsize,
         seed=seed,
         suptitle="Multilevel VAR Network (mlVAR)",

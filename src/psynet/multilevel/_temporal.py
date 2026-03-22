@@ -11,8 +11,8 @@ try:
     import statsmodels.formula.api as smf
 except ImportError:
     raise ImportError(
-        "statsmodels is required for mlVAR estimation. "
-        "Install it with: pip install psynet[mlvar]"
+        "statsmodels is required for multilevel VAR estimation. "
+        "Install it with: pip install psynet[multilevel]"
     )
 
 from joblib import Parallel, delayed
@@ -77,7 +77,7 @@ def _fit_one_dv(
     }
 
 
-def estimate_mlvar_temporal(
+def estimate_multilevel_temporal(
     lag_data: pd.DataFrame,
     var_cols: list[str],
     subject: str,
@@ -92,7 +92,7 @@ def estimate_mlvar_temporal(
     Parameters
     ----------
     lag_data : pd.DataFrame
-        Lagged data from :func:`make_mlvar_lag_data`.
+        Lagged data from :func:`make_multilevel_lag_data`.
     var_cols : list[str]
         Variable column names.
     subject : str
