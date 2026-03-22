@@ -26,6 +26,7 @@ class EBICglassoEstimator:
         lambda_min_ratio: float = 0.01,
         cor_method: str | CorMethod = CorMethod.PEARSON,
         threshold: float = 1e-4,
+        n_jobs: int = 1,
         **kwargs,
     ) -> Network:
         cor_method = CorMethod(cor_method)

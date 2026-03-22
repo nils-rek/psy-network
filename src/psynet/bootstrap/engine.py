@@ -213,6 +213,9 @@ def bootnet(
     if method is None:
         method = "EBICglasso"
 
+    # Disable inner parallelism by default to avoid nested joblib overhead
+    est_kwargs.setdefault("n_jobs", 1)
+
     logger.info("bootnet: method=%s, est_kwargs=%s", method, est_kwargs)
 
     # Estimate original network

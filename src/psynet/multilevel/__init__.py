@@ -103,6 +103,7 @@ def estimate_multilevel_network(
         n_lambda=n_lambda,
         lambda_min_ratio=lambda_min_ratio,
         threshold=threshold,
+        n_jobs=n_cores,
     )
 
     # Step 3: Between-subjects network from subject means
@@ -112,6 +113,7 @@ def estimate_multilevel_network(
         n_lambda=n_lambda,
         lambda_min_ratio=lambda_min_ratio,
         threshold=threshold,
+        n_jobs=n_cores,
     )
 
     return MultilevelNetwork(

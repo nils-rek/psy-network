@@ -3,9 +3,29 @@
 from __future__ import annotations
 
 import numpy as np
+from joblib import Parallel, delayed
 from sklearn.linear_model import LassoCV
 
 from ..network import Network
+
+
+def _fit_one_var_column(
+    j: int,
+    X: np.ndarray,
+    Y: np.ndarray,
+    cv: int,
+    n_alphas: int,
+    max_iter: int,
+) -> tuple[int, np.ndarray]:
+    """Fit a single LassoCV for variable j. Module-level for joblib pickling."""
+    T = Y.shape[0]
+    lasso = LassoCV(
+        cv=min(cv, T),
+        alphas=n_alphas,
+        max_iter=max_iter,
+    )
+    lasso.fit(X, Y[:, j])
+    return j, lasso.coef_
 
 
 def estimate_temporal(
@@ -17,6 +37,7 @@ def estimate_temporal(
     n_alphas: int = 100,
     max_iter: int = 10000,
     threshold: float = 1e-4,
+    n_jobs: int = 1,
 ) -> tuple[Network, np.ndarray]:
     """Estimate temporal (directed) network via sparse VAR(1).
 
@@ -40,6 +61,9 @@ def estimate_temporal(
         Maximum iterations for Lasso.
     threshold : float
         Coefficients with absolute value below this are zeroed.
+    n_jobs : int
+        Number of parallel jobs for fitting variable-wise models.
+        ``1`` (default) runs serially; ``-1`` uses all cores.
 
     Returns
     -------
@@ -51,14 +75,17 @@ def estimate_temporal(
     T, p = Y.shape
     B = np.zeros((p, p))
 
-    for j in range(p):
-        lasso = LassoCV(
-            cv=min(cv, T),
-            alphas=n_alphas,
-            max_iter=max_iter,
+    if n_jobs == 1:
+        for j in range(p):
+            _, coef = _fit_one_var_column(j, X, Y, cv, n_alphas, max_iter)
+            B[j, :] = coef
+    else:
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(_fit_one_var_column)(j, X, Y, cv, n_alphas, max_iter)
+            for j in range(p)
         )
-        lasso.fit(X, Y[:, j])
-        B[j, :] = lasso.coef_
+        for j, coef in results:
+            B[j, :] = coef
 
     # Threshold small coefficients
     B[np.abs(B) < threshold] = 0.0

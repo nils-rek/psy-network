@@ -17,6 +17,7 @@ def estimate_multilevel_contemporaneous(
     n_lambda: int = 100,
     lambda_min_ratio: float = 0.01,
     threshold: float = 1e-4,
+    n_jobs: int = 1,
 ) -> Network:
     """Estimate contemporaneous network from pooled residuals via EBIC-glasso.
 

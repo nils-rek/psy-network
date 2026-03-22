@@ -25,6 +25,7 @@ def estimate_var_network(
     n_lambda: int = 100,
     lambda_min_ratio: float = 0.01,
     contemp_threshold: float = 1e-4,
+    n_jobs: int = 1,
 ) -> TSNetwork:
     """Estimate a time-series network using graphicalVAR.
 
@@ -58,6 +59,9 @@ def estimate_var_network(
         Ratio of minimum to maximum lambda.
     contemp_threshold : float
         Threshold for zeroing small partial correlations.
+    n_jobs : int
+        Number of parallel jobs for variable-wise model fitting.
+        ``1`` (default) runs serially; ``-1`` uses all cores.
 
     Returns
     -------
@@ -74,6 +78,7 @@ def estimate_var_network(
         n_alphas=n_alphas,
         max_iter=max_iter,
         threshold=var_threshold,
+        n_jobs=n_jobs,
     )
 
     contemporaneous_net = estimate_contemporaneous(
@@ -82,6 +87,7 @@ def estimate_var_network(
         n_lambda=n_lambda,
         lambda_min_ratio=lambda_min_ratio,
         threshold=contemp_threshold,
+        n_jobs=n_jobs,
     )
 
     return TSNetwork(

@@ -18,6 +18,7 @@ def estimate_between_subjects(
     n_lambda: int = 100,
     lambda_min_ratio: float = 0.01,
     threshold: float = 1e-4,
+    n_jobs: int = 1,
 ) -> Network:
     """Estimate between-subjects network from subject-level means.
 
