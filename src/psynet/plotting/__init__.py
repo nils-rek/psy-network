@@ -10,6 +10,7 @@ from .group_plot import (
 )
 from .ts_plot import plot_ts_networks
 from .community_plot import plot_community
+from .mlvar_plot import plot_mlvar_networks
 
 __all__ = [
     "plot_network",
@@ -22,4 +23,5 @@ __all__ = [
     "plot_group_centrality_comparison",
     "plot_ts_networks",
     "plot_community",
+    "plot_mlvar_networks",
 ]

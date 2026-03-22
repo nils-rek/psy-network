@@ -74,3 +74,10 @@ def var_data() -> pd.DataFrame:
     """Small VAR(1) time-series dataset (200 × 4) for time-series tests."""
     from psynet.datasets import make_var_data
     return make_var_data(n_timepoints=200, p=4, seed=42)
+
+
+@pytest.fixture
+def mlvar_data() -> pd.DataFrame:
+    """Multilevel VAR dataset (10 subjects × 30 timepoints × 4 variables)."""
+    from psynet.datasets import make_mlvar_data
+    return make_mlvar_data(n_subjects=10, n_timepoints=30, p=4, seed=42)

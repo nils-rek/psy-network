@@ -20,9 +20,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mlvar = ["statsmodels>=0.14"]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
+    "statsmodels>=0.14",
 ]
 
 [tool.hatch.build.targets.wheel]

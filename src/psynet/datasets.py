@@ -228,6 +228,44 @@ def make_multigroup(
     return pd.concat(frames, ignore_index=True)
 
 
+def _make_sparse_var_matrix(
+    rng: np.random.Generator,
+    p: int,
+    sparsity: float,
+    spectral_radius: float,
+) -> np.ndarray:
+    """Create a sparse VAR(1) transition matrix scaled to a target spectral radius.
+
+    Parameters
+    ----------
+    rng : np.random.Generator
+        Random number generator.
+    p : int
+        Number of variables.
+    sparsity : float
+        Proportion of off-diagonal entries to zero out.
+    spectral_radius : float
+        Target spectral radius (must be < 1 for stationarity).
+
+    Returns
+    -------
+    ndarray, shape (p, p)
+        Sparse transition matrix.
+    """
+    B = rng.uniform(-0.5, 0.5, size=(p, p))
+    mask = rng.random((p, p)) < sparsity
+    np.fill_diagonal(mask, False)
+    B[mask] = 0.0
+    np.fill_diagonal(B, rng.uniform(0.2, 0.5, size=p))
+
+    eigvals = np.linalg.eigvals(B)
+    current_radius = np.max(np.abs(eigvals))
+    if current_radius > 0:
+        B = B * (spectral_radius / current_radius)
+
+    return B
+
+
 def make_var_data(
     n_timepoints: int = 500,
     p: int = 6,
@@ -265,20 +303,7 @@ def make_var_data(
     """
     rng = np.random.default_rng(seed)
 
-    # Create sparse B matrix
-    B = rng.uniform(-0.5, 0.5, size=(p, p))
-    # Sparsify off-diagonal
-    mask = rng.random((p, p)) < sparsity
-    np.fill_diagonal(mask, False)  # keep diagonal
-    B[mask] = 0.0
-    # Set diagonal to small autoregressive values
-    np.fill_diagonal(B, rng.uniform(0.2, 0.5, size=p))
-
-    # Scale to target spectral radius
-    eigvals = np.linalg.eigvals(B)
-    current_radius = np.max(np.abs(eigvals))
-    if current_radius > 0:
-        B = B * (spectral_radius / current_radius)
+    B = _make_sparse_var_matrix(rng, p, sparsity, spectral_radius)
 
     # Create sparse innovation precision → covariance
     prec = np.eye(p)
@@ -310,3 +335,85 @@ def make_var_data(
 
     columns = [f"V{i+1}" for i in range(p)]
     return pd.DataFrame(Y, columns=columns)
+
+
+def make_mlvar_data(
+    n_subjects: int = 20,
+    n_timepoints: int = 50,
+    p: int = 4,
+    *,
+    spectral_radius: float = 0.6,
+    sparsity: float = 0.3,
+    random_effect_sd: float = 0.1,
+    seed: int = 42,
+    burn_in: int = 50,
+) -> pd.DataFrame:
+    """Generate synthetic multilevel VAR(1) data for multiple subjects.
+
+    Creates data from a shared VAR(1) process with subject-specific random
+    effects on the transition matrix. Useful for testing mlVAR estimation.
+
+    Parameters
+    ----------
+    n_subjects : int
+        Number of subjects.
+    n_timepoints : int
+        Number of timepoints per subject (after burn-in).
+    p : int
+        Number of variables.
+    spectral_radius : float
+        Target spectral radius for the population B matrix (must be < 1).
+    sparsity : float
+        Proportion of off-diagonal entries in B to zero out.
+    random_effect_sd : float
+        Standard deviation of subject-specific random effects on B.
+    seed : int
+        Random seed.
+    burn_in : int
+        Number of burn-in samples to discard per subject.
+
+    Returns
+    -------
+    pd.DataFrame
+        Long-format DataFrame with columns: ``subject``, ``beep``,
+        ``V1``..``Vp``.
+    """
+    rng = np.random.default_rng(seed)
+
+    B = _make_sparse_var_matrix(rng, p, sparsity, spectral_radius)
+
+    # Innovation covariance (shared across subjects)
+    sigma = np.eye(p)
+    for i in range(p - 1):
+        val = rng.uniform(0.1, 0.3)
+        sigma[i, i + 1] = val
+        sigma[i + 1, i] = val
+    eigvals_s = np.linalg.eigvalsh(sigma)
+    if eigvals_s.min() < 0.1:
+        sigma += (0.15 - eigvals_s.min()) * np.eye(p)
+    L_sigma = np.linalg.cholesky(sigma)
+
+    frames = []
+    for s in range(n_subjects):
+        # Subject-specific B with random effects
+        B_s = B + rng.normal(0, random_effect_sd, size=(p, p))
+        # Ensure stationarity: rescale if spectral radius >= 1
+        sr = np.max(np.abs(np.linalg.eigvals(B_s)))
+        if sr >= 1.0:
+            B_s = B_s * (0.95 / sr)
+
+        # Simulate VAR(1)
+        total = n_timepoints + burn_in
+        Y = np.zeros((total, p))
+        Y[0] = rng.standard_normal(p)
+        for t in range(1, total):
+            eps = rng.standard_normal(p) @ L_sigma.T
+            Y[t] = B_s @ Y[t - 1] + eps
+
+        Y = Y[burn_in:]
+        df = pd.DataFrame(Y, columns=[f"V{i+1}" for i in range(p)])
+        df["subject"] = f"S{s+1}"
+        df["beep"] = np.arange(1, n_timepoints + 1)
+        frames.append(df)
+
+    return pd.concat(frames, ignore_index=True)
