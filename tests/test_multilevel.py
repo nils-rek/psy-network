@@ -26,10 +26,11 @@ class TestMultilevelValidation:
         with pytest.raises(ValueError, match="at least 2 subjects"):
             validate_multilevel_data(df, "subject")
 
-    def test_nan_values(self, multilevel_data):
+    def test_nan_values_allowed(self, multilevel_data):
+        """Multilevel validation now allows NaN (handled per-subject during lag construction)."""
         multilevel_data.iloc[0, 0] = np.nan
-        with pytest.raises(ValueError, match="NaN"):
-            validate_multilevel_data(multilevel_data, "subject")
+        var_cols = validate_multilevel_data(multilevel_data, "subject")
+        assert len(var_cols) >= 2
 
     def test_too_few_observations_per_subject(self):
         df = pd.DataFrame({
@@ -252,3 +253,127 @@ class TestMultilevelPlotting:
         result = estimate_multilevel_network(multilevel_data, "subject", beep="beep")
         fig = result.plot()
         assert len(fig.axes) == 3
+
+
+# ---------------------------------------------------------------------------
+# P-value thresholding
+# ---------------------------------------------------------------------------
+
+class TestTemporalPvalueThresholding:
+    def test_default_alpha_zeros_nonsignificant(self, multilevel_data):
+        """Default temporal_alpha=0.05 should zero out non-significant edges."""
+        result = estimate_multilevel_network(multilevel_data, "subject", beep="beep")
+        adj = result.temporal.adjacency
+        pvals = result.pvalues
+        # All non-zero edges should have p <= 0.05
+        nonzero_mask = adj != 0
+        if nonzero_mask.any():
+            assert np.all(pvals[nonzero_mask] <= 0.05)
+
+    def test_alpha_none_preserves_all_edges(self, multilevel_data):
+        """temporal_alpha=None should keep all non-threshold coefficients."""
+        result = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep", temporal_alpha=None,
+        )
+        # With no p-value thresholding, unthresholded_temporal should be None
+        assert result.unthresholded_temporal is None
+
+    def test_unthresholded_temporal_stored(self, multilevel_data):
+        """When temporal_alpha is set, unthresholded_temporal should be stored."""
+        result = estimate_multilevel_network(multilevel_data, "subject", beep="beep")
+        assert result.unthresholded_temporal is not None
+        # Unthresholded should have >= as many non-zero edges
+        n_thresh = np.count_nonzero(result.temporal.adjacency)
+        n_unthresh = np.count_nonzero(result.unthresholded_temporal.adjacency)
+        assert n_unthresh >= n_thresh
+
+    def test_temporal_thresholded_method(self, multilevel_data):
+        """Post-hoc thresholding should produce valid networks."""
+        result = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep", temporal_alpha=None,
+        )
+        threshed = result.temporal_thresholded(alpha=0.05)
+        assert threshed.directed is True
+        assert threshed.adjacency.shape == result.temporal.adjacency.shape
+        # All non-zero edges should have p <= 0.05
+        nonzero = threshed.adjacency != 0
+        if nonzero.any():
+            assert np.all(result.pvalues[nonzero] <= 0.05)
+
+    def test_subject_temporal_inherits_mask(self, multilevel_data):
+        """Per-subject temporal networks should also be masked by p-value."""
+        result = estimate_multilevel_network(multilevel_data, "subject", beep="beep")
+        pval_mask = result.pvalues > 0.05
+        for s, net in result.subject_temporal.items():
+            # Where fixed-effect p > alpha, subject network should also be zero
+            assert np.all(net.adjacency[pval_mask] == 0)
+
+
+# ---------------------------------------------------------------------------
+# Random effects structure
+# ---------------------------------------------------------------------------
+
+class TestRandomEffectsStructure:
+    def test_fixed_mode(self, multilevel_data):
+        """temporal='fixed' should estimate successfully."""
+        result = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep",
+            temporal="fixed", temporal_alpha=None,
+        )
+        assert result.temporal.adjacency.shape == (4, 4)
+
+    def test_fixed_mode_subjects_equal_fixed(self, multilevel_data):
+        """In 'fixed' mode, all per-subject networks should equal fixed effects."""
+        result = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep",
+            temporal="fixed", temporal_alpha=None,
+        )
+        for s, net in result.subject_temporal.items():
+            np.testing.assert_array_almost_equal(
+                net.adjacency, result.temporal.adjacency,
+            )
+
+    def test_invalid_temporal_raises(self, multilevel_data):
+        with pytest.raises(ValueError, match="correlated.*orthogonal.*fixed"):
+            estimate_multilevel_network(
+                multilevel_data, "subject", beep="beep", temporal="bad",
+            )
+
+
+# ---------------------------------------------------------------------------
+# NaN handling
+# ---------------------------------------------------------------------------
+
+class TestMultilevelNanHandling:
+    def test_estimation_with_nan(self):
+        """Multilevel estimation should handle scattered NaN values."""
+        from psynet.datasets import make_multilevel_data
+        df = make_multilevel_data(n_subjects=5, n_timepoints=30, p=3, seed=0)
+        # Introduce NaN
+        rng = np.random.default_rng(99)
+        nan_idx = rng.choice(len(df), size=5, replace=False)
+        df.iloc[nan_idx, 0] = np.nan
+        result = estimate_multilevel_network(
+            df, "subject", beep="beep", temporal="fixed",
+        )
+        assert isinstance(result, MultilevelNetwork)
+
+    def test_nan_warning_without_beep(self):
+        """Should warn when dropping NaN without beep column."""
+        from psynet.datasets import make_multilevel_data
+        df = make_multilevel_data(n_subjects=5, n_timepoints=30, p=3, seed=0)
+        df.iloc[0, 0] = np.nan
+        var_cols = validate_multilevel_data(df, "subject")
+        with pytest.warns(UserWarning, match="NaN rows were dropped"):
+            make_multilevel_lag_data(df, var_cols, "subject")
+
+    def test_nan_no_warning_with_beep(self):
+        """Should NOT warn when dropping NaN with beep column provided."""
+        import warnings
+        from psynet.datasets import make_multilevel_data
+        df = make_multilevel_data(n_subjects=5, n_timepoints=30, p=3, seed=0)
+        df.iloc[0, 0] = np.nan
+        var_cols = validate_multilevel_data(df, "subject", beep="beep")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            make_multilevel_lag_data(df, var_cols, "subject", beep="beep")

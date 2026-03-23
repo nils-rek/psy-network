@@ -26,6 +26,78 @@ def strength(net: Network) -> pd.Series:
     return pd.Series(vals, index=net.labels, name="strength")
 
 
+def in_strength(net: Network) -> pd.Series:
+    """Sum of absolute incoming edge weights per node.
+
+    For a directed network with adjacency convention ``A[j, k]`` = effect
+    of *k* on *j* (i.e. k → j), in-strength of node *i* is the row sum
+    ``sum(|A[i, :]|)``.
+
+    Raises
+    ------
+    ValueError
+        If the network is undirected.
+    """
+    if not net.directed:
+        raise ValueError("in_strength is only defined for directed networks")
+    return pd.Series(
+        np.sum(np.abs(net.adjacency), axis=1),
+        index=net.labels, name="inStrength",
+    )
+
+
+def out_strength(net: Network) -> pd.Series:
+    """Sum of absolute outgoing edge weights per node.
+
+    For a directed network with adjacency convention ``A[j, k]`` = effect
+    of *k* on *j* (i.e. k → j), out-strength of node *k* is the column
+    sum ``sum(|A[:, k]|)``.
+
+    Raises
+    ------
+    ValueError
+        If the network is undirected.
+    """
+    if not net.directed:
+        raise ValueError("out_strength is only defined for directed networks")
+    return pd.Series(
+        np.sum(np.abs(net.adjacency), axis=0),
+        index=net.labels, name="outStrength",
+    )
+
+
+def in_expected_influence(net: Network) -> pd.Series:
+    """Sum of signed incoming edge weights per node.
+
+    Raises
+    ------
+    ValueError
+        If the network is undirected.
+    """
+    if not net.directed:
+        raise ValueError("in_expected_influence is only defined for directed networks")
+    return pd.Series(
+        np.sum(net.adjacency, axis=1),
+        index=net.labels, name="inExpectedInfluence",
+    )
+
+
+def out_expected_influence(net: Network) -> pd.Series:
+    """Sum of signed outgoing edge weights per node.
+
+    Raises
+    ------
+    ValueError
+        If the network is undirected.
+    """
+    if not net.directed:
+        raise ValueError("out_expected_influence is only defined for directed networks")
+    return pd.Series(
+        np.sum(net.adjacency, axis=0),
+        index=net.labels, name="outExpectedInfluence",
+    )
+
+
 def expected_influence(net: Network) -> pd.Series:
     """Sum of signed edge weights per node.
 
@@ -90,6 +162,10 @@ def betweenness(net: Network, *, normalized: bool = True) -> pd.Series:
 def centrality(net: Network, *, normalized: bool = True) -> pd.DataFrame:
     """Compute all centrality measures; return a labeled DataFrame.
 
+    For directed networks, additional columns are included:
+    ``inStrength``, ``outStrength``, ``inExpectedInfluence``, and
+    ``outExpectedInfluence``.
+
     Parameters
     ----------
     net : Network
@@ -98,9 +174,15 @@ def centrality(net: Network, *, normalized: bool = True) -> pd.DataFrame:
         Passed to ``closeness()`` and ``betweenness()``.  See their
         docstrings for details.
     """
-    return pd.DataFrame({
+    d = {
         "strength": strength(net),
         "closeness": closeness(net, normalized=normalized),
         "betweenness": betweenness(net, normalized=normalized),
         "expectedInfluence": expected_influence(net),
-    })
+    }
+    if net.directed:
+        d["inStrength"] = in_strength(net)
+        d["outStrength"] = out_strength(net)
+        d["inExpectedInfluence"] = in_expected_influence(net)
+        d["outExpectedInfluence"] = out_expected_influence(net)
+    return pd.DataFrame(d)

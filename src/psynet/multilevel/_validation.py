@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -51,7 +53,7 @@ def validate_multilevel_data(
             raise ValueError(f"day column {day!r} not found in data")
         exclude.add(day)
 
-    var_cols = _validate_var_columns(data, exclude)
+    var_cols = _validate_var_columns(data, exclude, allow_nan=True)
 
     unique_subjects = data[subject].unique()
     if len(unique_subjects) < 2:
@@ -104,8 +106,12 @@ def make_multilevel_lag_data(
     """
     lag_frames = []
 
+    nan_dropped = False
     for subj_id, subj_data in data.groupby(subject):
-        subj_data = subj_data.reset_index(drop=True)
+        n_before = len(subj_data)
+        subj_data = subj_data.dropna(subset=var_cols).reset_index(drop=True)
+        if len(subj_data) < n_before:
+            nan_dropped = True
         values = subj_data[var_cols].values
 
         beep_vals = subj_data[beep].values if beep is not None else None
@@ -128,5 +134,14 @@ def make_multilevel_lag_data(
 
     if not lag_frames:
         raise ValueError("No valid consecutive observation pairs found")
+
+    if nan_dropped and beep is None:
+        warnings.warn(
+            "NaN rows were dropped within subjects.  Without a beep/day "
+            "column, consecutive rows are assumed to be consecutive "
+            "timepoints — provide beep/day columns for correct lag detection.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     return pd.concat(lag_frames, ignore_index=True)

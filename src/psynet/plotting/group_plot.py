@@ -63,6 +63,7 @@ def plot_group_networks(
         G = first_net.to_networkx()
         layout_funcs = {
             "spring": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
+            "fruchterman_reingold": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
             "circular": lambda: nx.circular_layout(G),
             "kamada_kawai": lambda: nx.kamada_kawai_layout(
                 G, dist={n: {m: 1.0 / abs(G[n][m]["weight"])

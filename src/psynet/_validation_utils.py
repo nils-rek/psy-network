@@ -9,8 +9,10 @@ import pandas as pd
 def _validate_var_columns(
     data: pd.DataFrame,
     exclude_cols: set[str],
+    *,
+    allow_nan: bool = False,
 ) -> list[str]:
-    """Filter columns, check >=2 vars, check numeric, check NaN.
+    """Filter columns, check >=2 vars, check numeric, optionally check NaN.
 
     Parameters
     ----------
@@ -18,6 +20,9 @@ def _validate_var_columns(
         Input data.
     exclude_cols : set[str]
         Column names to exclude (e.g. subject, beep, day).
+    allow_nan : bool
+        If ``True``, skip the NaN check.  Used by multilevel estimation
+        which handles NaN per-subject during lag construction.
 
     Returns
     -------
@@ -27,7 +32,8 @@ def _validate_var_columns(
     Raises
     ------
     ValueError
-        If fewer than 2 variables, non-numeric columns, or NaN values.
+        If fewer than 2 variables, non-numeric columns, or NaN values
+        (when ``allow_nan=False``).
     """
     var_cols = [c for c in data.columns if c not in exclude_cols]
 
@@ -40,7 +46,7 @@ def _validate_var_columns(
     if not var_data.apply(pd.api.types.is_numeric_dtype).all():
         raise ValueError("All variable columns must be numeric")
 
-    if var_data.isna().any().any():
+    if not allow_nan and var_data.isna().any().any():
         raise ValueError("Data contains NaN values; remove or impute before estimation")
 
     return var_cols

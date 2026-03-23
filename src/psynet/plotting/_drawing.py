@@ -32,6 +32,7 @@ def _compute_layout(network, layout: str = "spring", seed: int = 42) -> dict:
     G = network.to_networkx()
     layout_funcs = {
         "spring": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
+        "fruchterman_reingold": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
         "circular": lambda: nx.circular_layout(G),
         "kamada_kawai": lambda: nx.kamada_kawai_layout(G),
     }

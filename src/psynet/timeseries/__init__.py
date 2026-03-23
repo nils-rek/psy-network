@@ -27,11 +27,21 @@ def estimate_var_network(
     contemp_threshold: float = 1e-4,
     n_jobs: int = 1,
 ) -> TSNetwork:
-    """Estimate a time-series network using graphicalVAR.
+    """Estimate a time-series network using a graphicalVAR-style approach.
 
     Two-step approach:
     1. Sparse VAR(1) via column-wise LassoCV → temporal (directed) network
     2. EBIC graphical lasso on VAR residuals → contemporaneous (undirected) network
+
+    .. note::
+
+       This differs from R's ``graphicalVAR`` package, which uses a joint
+       penalized likelihood (Rothman et al., 2010) to simultaneously
+       estimate both the temporal (Beta) and contemporaneous (Kappa)
+       matrices.  The two-step approach here is computationally simpler
+       and produces comparable results for most datasets, but may diverge
+       from ``graphicalVAR`` on small samples where the joint penalty
+       interaction leads to more conservative temporal edge selection.
 
     Parameters
     ----------

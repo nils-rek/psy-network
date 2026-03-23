@@ -19,6 +19,8 @@ def estimate_multilevel_network(
     *,
     beep: str | None = None,
     day: str | None = None,
+    temporal_alpha: float | None = 0.05,
+    temporal: str = "correlated",
     gamma: float = 0.5,
     n_lambda: int = 100,
     lambda_min_ratio: float = 0.01,
@@ -43,6 +45,18 @@ def estimate_multilevel_network(
         Column for beep/measurement index within a day.
     day : str, optional
         Column for day identifier.
+    temporal_alpha : float or None
+        Significance level for thresholding temporal edges.  Edges with
+        p-value > ``temporal_alpha`` are zeroed out, matching R's mlVAR
+        ``nonsig="hide"`` behaviour.  Set to ``None`` to keep all edges
+        (equivalent to R's ``nonsig="show"``).  Default ``0.05``.
+    temporal : str
+        Random effects structure for temporal estimation, matching R's
+        mlVAR ``temporal`` argument: ``"correlated"`` (full random slopes
+        covariance, default), ``"orthogonal"`` (uncorrelated random
+        slopes), or ``"fixed"`` (random intercepts only, no random
+        slopes).  Use ``"orthogonal"`` or ``"fixed"`` when the number
+        of variables is large and convergence issues arise.
     gamma : float
         EBIC gamma parameter for contemporaneous and between-subjects networks.
     n_lambda : int
@@ -63,12 +77,29 @@ def estimate_multilevel_network(
 
     # Step 1: Temporal network via mixed-effects models
     temporal_result = estimate_multilevel_temporal(
-        lag_data, var_cols, subject, n_cores=n_cores,
+        lag_data, var_cols, subject, temporal_re=temporal, n_cores=n_cores,
     )
 
     # Threshold small temporal coefficients
     fixed_coef = temporal_result.fixed_coef.copy()
     fixed_coef[np.abs(fixed_coef) < threshold] = 0.0
+
+    # P-value thresholding (matches R's mlVAR nonsig="hide")
+    unthresholded_temporal = None
+    pval_mask = None
+    if temporal_alpha is not None:
+        pval_mask = temporal_result.pvalues > temporal_alpha
+        # Store unthresholded version before zeroing
+        unthresholded_temporal = Network(
+            adjacency=fixed_coef.copy(),
+            labels=var_cols,
+            method="mlVAR",
+            n_observations=len(lag_data),
+            weighted=True,
+            signed=True,
+            directed=True,
+        )
+        fixed_coef[pval_mask] = 0.0
 
     temporal_net = Network(
         adjacency=fixed_coef,
@@ -86,6 +117,8 @@ def estimate_multilevel_network(
     for s in subject_ids:
         s_coef = temporal_result.subject_coefs[s].copy()
         s_coef[np.abs(s_coef) < threshold] = 0.0
+        if pval_mask is not None:
+            s_coef[pval_mask] = 0.0
         subject_temporal[s] = Network(
             adjacency=s_coef,
             labels=var_cols,
@@ -126,6 +159,7 @@ def estimate_multilevel_network(
         method="mlVAR",
         pvalues=temporal_result.pvalues,
         fit_info=temporal_result.fit_info,
+        unthresholded_temporal=unthresholded_temporal,
     )
 
 

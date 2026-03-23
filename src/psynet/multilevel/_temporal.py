@@ -32,22 +32,45 @@ def _fit_one_dv(
     var_cols: list[str],
     lag_data: pd.DataFrame,
     subject: str,
+    temporal_re: str = "correlated",
 ) -> dict:
-    """Fit a single mixed-effects model for DV var_cols[j]."""
+    """Fit a single mixed-effects model for DV var_cols[j].
+
+    Parameters
+    ----------
+    temporal_re : str
+        Random effects structure: ``"correlated"`` (full covariance),
+        ``"orthogonal"`` (diagonal / uncorrelated random slopes),
+        or ``"fixed"`` (random intercepts only, no random slopes).
+    """
     dv = var_cols[j]
     lag_cols = [f"{c}_lag" for c in var_cols]
 
     formula = f"{dv} ~ " + " + ".join(lag_cols)
 
-    # Random slopes for all lagged predictors
-    re_formula = " + ".join(lag_cols)
+    model_kwargs: dict = {
+        "formula": formula,
+        "data": lag_data,
+        "groups": lag_data[subject],
+    }
 
-    model = smf.mixedlm(
-        formula,
-        data=lag_data,
-        groups=lag_data[subject],
-        re_formula=re_formula,
-    )
+    if temporal_re == "correlated":
+        # Full random slopes with correlated covariance (current default)
+        model_kwargs["re_formula"] = " + ".join(lag_cols)
+    elif temporal_re == "orthogonal":
+        # Random intercept + uncorrelated random slopes via variance components
+        model_kwargs["re_formula"] = "1"
+        model_kwargs["vc_formula"] = {lc: f"0 + {lc}" for lc in lag_cols}
+    elif temporal_re == "fixed":
+        # Random intercepts only — no random slopes
+        model_kwargs["re_formula"] = "1"
+    else:
+        raise ValueError(
+            f"temporal must be 'correlated', 'orthogonal', or 'fixed', "
+            f"got {temporal_re!r}"
+        )
+
+    model = smf.mixedlm(**model_kwargs)
     result = model.fit(reml=True, method="lbfgs")
 
     # Fixed effects (skip intercept)
@@ -56,15 +79,39 @@ def _fit_one_dv(
 
     # Per-subject coefficients (fixed + random effects)
     subject_coefs = {}
-    for subj_id, re_vals in result.random_effects.items():
-        subj_fixed = fixed.copy()
-        for k, lc in enumerate(lag_cols):
-            if lc in re_vals.index:
-                subj_fixed[k] += re_vals[lc]
-        subject_coefs[subj_id] = subj_fixed
+    if temporal_re == "fixed":
+        # No random slopes — all subjects share fixed-effect coefficients
+        for subj_id in lag_data[subject].unique():
+            subject_coefs[subj_id] = fixed.copy()
+    else:
+        try:
+            re_dict = result.random_effects
+        except (np.linalg.LinAlgError, ValueError):
+            # Singular covariance — fall back to fixed-effect coefficients
+            re_dict = None
+        if re_dict is not None:
+            for subj_id, re_vals in re_dict.items():
+                subj_fixed = fixed.copy()
+                for k, lc in enumerate(lag_cols):
+                    if lc in re_vals.index:
+                        subj_fixed[k] += re_vals[lc]
+                subject_coefs[subj_id] = subj_fixed
+        else:
+            for subj_id in lag_data[subject].unique():
+                subject_coefs[subj_id] = fixed.copy()
 
-    # Residuals
-    residuals = result.resid
+    # Residuals — fall back to fixed-effect-only residuals when
+    # statsmodels cannot predict random effects (singular covariance)
+    try:
+        residuals = result.resid
+    except (np.linalg.LinAlgError, ValueError):
+        y = lag_data[dv].values
+        X_mat = lag_data[lag_cols].values
+        intercept = result.fe_params.get("Intercept", 0.0)
+        residuals = pd.Series(
+            y - intercept - X_mat @ fixed,
+            index=lag_data.index,
+        )
 
     return {
         "j": j,
@@ -82,6 +129,7 @@ def estimate_multilevel_temporal(
     var_cols: list[str],
     subject: str,
     *,
+    temporal_re: str = "correlated",
     n_cores: int = 1,
 ) -> _TemporalResult:
     """Estimate population and subject-level temporal networks via mixed-effects.
@@ -97,6 +145,9 @@ def estimate_multilevel_temporal(
         Variable column names.
     subject : str
         Subject identifier column.
+    temporal_re : str
+        Random effects structure: ``"correlated"``, ``"orthogonal"``,
+        or ``"fixed"``.
     n_cores : int
         Number of parallel jobs for fitting models.
 
@@ -107,7 +158,7 @@ def estimate_multilevel_temporal(
     p = len(var_cols)
 
     results = Parallel(n_jobs=n_cores)(
-        delayed(_fit_one_dv)(j, var_cols, lag_data, subject)
+        delayed(_fit_one_dv)(j, var_cols, lag_data, subject, temporal_re)
         for j in range(p)
     )
 
