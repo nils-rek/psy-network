@@ -7,6 +7,10 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from matplotlib.lines import Line2D
+
+from . import _theme as T
+from ._drawing import _draw_legend_panel
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -17,17 +21,18 @@ def plot_network(
     net: Network,
     *,
     layout: str = "spring",
-    node_size: float | str = 300,
-    node_color: str = "#87CEEB",
-    edge_color_pos: str = "#2166AC",
-    edge_color_neg: str = "#B2182B",
-    max_edge_width: float = 3.0,
-    min_edge_width: float = 0.3,
-    font_size: int = 8,
+    node_size: float | str = T.NODE_SIZE_DEFAULT,
+    node_color: str = T.NODE_FILL_COLOR,
+    edge_color_pos: str = T.EDGE_COLOR_POS,
+    edge_color_neg: str = T.EDGE_COLOR_NEG,
+    max_edge_width: float = T.EDGE_WIDTH_MAX,
+    min_edge_width: float = T.EDGE_WIDTH_MIN,
+    font_size: int = T.FONT_SIZE_NODE,
     title: str | None = None,
     ax: plt.Axes | None = None,
-    figsize: tuple[float, float] = (8, 8),
+    figsize: tuple[float, float] = T.FIGSIZE_SINGLE,
     seed: int = 42,
+    show_legend: bool = True,
 ) -> Figure:
     """Plot a psychometric network.
 
@@ -55,6 +60,8 @@ def plot_network(
         Figure size (only used if ax is None).
     seed : int
         Random seed for spring layout.
+    show_legend : bool
+        If True, show a side panel mapping numbered nodes to variable names.
 
     Returns
     -------
@@ -76,9 +83,20 @@ def plot_network(
 
     # Figure
     if ax is None:
-        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        if show_legend:
+            fig, axes = plt.subplots(
+                1, 2, figsize=figsize,
+                gridspec_kw={"width_ratios": [1, 0.25]},
+            )
+            net_ax = axes[0]
+            legend_ax = axes[1]
+        else:
+            fig, net_ax = plt.subplots(1, 1, figsize=figsize)
+            legend_ax = None
     else:
         fig = ax.get_figure()
+        net_ax = ax
+        legend_ax = None
 
     # Node sizes
     if isinstance(node_size, str):
@@ -87,16 +105,28 @@ def plot_network(
         if node_size in cent.columns:
             vals = cent[node_size].values
             vals = (vals - vals.min()) / (vals.max() - vals.min() + 1e-10)
-            sizes = 200 + vals * 800
+            lo, hi = T.NODE_SIZE_RANGE
+            sizes = lo + vals * (hi - lo)
         else:
-            sizes = 300
+            sizes = T.NODE_SIZE_DEFAULT
     else:
         sizes = node_size
 
     # Draw nodes
-    nx.draw_networkx_nodes(G, pos, ax=ax, node_size=sizes, node_color=node_color,
-                           edgecolors="#333333", linewidths=1.0)
-    nx.draw_networkx_labels(G, pos, ax=ax, font_size=font_size, font_weight="bold")
+    nx.draw_networkx_nodes(
+        G, pos, ax=net_ax, node_size=sizes, node_color=node_color,
+        edgecolors=T.NODE_BORDER_COLOR, linewidths=T.NODE_BORDER_WIDTH,
+    )
+
+    # Numbered labels when legend is shown, full labels otherwise
+    if show_legend:
+        label_map = {label: str(i + 1) for i, label in enumerate(net.labels)}
+    else:
+        label_map = {label: label for label in net.labels}
+    nx.draw_networkx_labels(
+        G, pos, labels=label_map, ax=net_ax,
+        font_size=font_size, font_weight=T.FONT_WEIGHT_NODE,
+    )
 
     # Draw edges
     edges = G.edges(data=True)
@@ -107,13 +137,34 @@ def plot_network(
 
         for (u, v, d), w in zip(edges, widths):
             color = edge_color_pos if d["weight"] >= 0 else edge_color_neg
-            style = "solid" if d["weight"] >= 0 else "dashed"
+            style = T.EDGE_STYLE_POS if d["weight"] >= 0 else T.EDGE_STYLE_NEG
             nx.draw_networkx_edges(
-                G, pos, edgelist=[(u, v)], ax=ax,
-                width=float(w), edge_color=color, style=style, alpha=0.7,
+                G, pos, edgelist=[(u, v)], ax=net_ax,
+                width=float(w), edge_color=color, style=style,
+                alpha=T.EDGE_ALPHA,
             )
 
-    ax.set_title(title or f"Network ({net.method})", fontsize=12)
-    ax.axis("off")
+    net_ax.set_title(title or f"Network ({net.method})",
+                     fontsize=T.TITLE_FONT_SIZE)
+    net_ax.axis("off")
+
+    # Legend panel
+    if legend_ax is not None:
+        _draw_legend_panel(
+            legend_ax, net.labels,
+            edge_color_pos=edge_color_pos,
+            edge_color_neg=edge_color_neg,
+        )
+    elif ax is not None and show_legend:
+        # Inline edge-type legend when user provides their own axes
+        legend_handles = [
+            Line2D([0], [0], color=edge_color_pos, linewidth=2,
+                   linestyle="solid", label="Positive"),
+            Line2D([0], [0], color=edge_color_neg, linewidth=2,
+                   linestyle="dashed", label="Negative"),
+        ]
+        net_ax.legend(handles=legend_handles, loc="upper left",
+                      fontsize=T.FONT_SIZE_LEGEND, frameon=False)
+
     fig.tight_layout()
     return fig

@@ -18,6 +18,7 @@ def plot_multilevel_networks(
     shared_layout: bool = True,
     figsize: tuple[float, float] | None = None,
     seed: int = 42,
+    show_legend: bool = True,
     **kwargs,
 ) -> Figure:
     """Plot temporal, contemporaneous, and between-subjects networks.
@@ -34,6 +35,8 @@ def plot_multilevel_networks(
         Figure size.
     seed : int
         Random seed for layout.
+    show_legend : bool
+        If True, add a numbered variable legend panel on the right.
     **kwargs
         Additional drawing keyword arguments.
 
@@ -41,9 +44,6 @@ def plot_multilevel_networks(
     -------
     Figure
     """
-    if figsize is None:
-        figsize = (18, 6)
-
     panels = [
         ("Temporal", ml_net.temporal, True),
         ("Contemporaneous", ml_net.contemporaneous, False),
@@ -57,5 +57,6 @@ def plot_multilevel_networks(
         figsize=figsize,
         seed=seed,
         suptitle="Multilevel VAR Network (mlVAR)",
+        show_legend=show_legend,
         **kwargs,
     )

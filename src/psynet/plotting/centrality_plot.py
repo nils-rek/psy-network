@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 
+from . import _theme as T
+
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
     from ..network import Network
@@ -57,13 +59,14 @@ def plot_centrality(
             y=range(len(values)), xmin=0, xmax=values.values,
             color="#666666", linewidth=0.8,
         )
-        ax.scatter(values.values, range(len(values)), color="#2166AC", s=40, zorder=3)
+        ax.scatter(values.values, range(len(values)),
+                   color=T.ACCENT_COLORS[0], s=40, zorder=3)
         ax.set_yticks(range(len(values)))
         ax.set_yticklabels(values.index, fontsize=8)
         ax.axvline(0, color="black", linewidth=0.5, linestyle="--")
         ax.set_title(measure, fontsize=10)
         ax.set_xlabel("z-score" if standardized else "value", fontsize=8)
 
-    fig.suptitle("Centrality Indices", fontsize=12, y=1.02)
+    fig.suptitle("Centrality Indices", fontsize=T.TITLE_FONT_SIZE, y=1.02)
     fig.tight_layout()
     return fig

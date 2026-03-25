@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from matplotlib.lines import Line2D
+
+from . import _theme as T
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -39,6 +42,82 @@ def _compute_layout(network, layout: str = "spring", seed: int = 42) -> dict:
     return layout_funcs.get(layout, layout_funcs["spring"])()
 
 
+def _draw_legend_panel(
+    ax,
+    labels: list[str],
+    *,
+    edge_color_pos: str = T.EDGE_COLOR_POS,
+    edge_color_neg: str = T.EDGE_COLOR_NEG,
+    community_colors: list | None = None,
+):
+    """Draw a numbered variable-name legend on a dedicated axes.
+
+    Parameters
+    ----------
+    ax : Axes
+        Matplotlib axes to draw the legend on.
+    labels : list[str]
+        Variable names in order.
+    edge_color_pos, edge_color_neg : str
+        Colors for the edge-type legend entries.
+    community_colors : list or None
+        If provided, draw a colored marker dot for each variable.
+    """
+    ax.axis("off")
+    n = len(labels)
+    # Leave space at bottom for edge-type legend
+    top = 0.95
+    bottom = 0.15
+    step = (top - bottom) / max(n, 1)
+
+    for i, label in enumerate(labels):
+        y = top - i * step
+        num_text = f"{i + 1}"
+
+        if community_colors is not None:
+            ax.plot(
+                0.05, y, "o",
+                color=community_colors[i],
+                markersize=7,
+                transform=ax.transAxes,
+                clip_on=False,
+            )
+            ax.text(
+                0.15, y, num_text,
+                fontsize=T.FONT_SIZE_LEGEND, fontweight="bold",
+                va="center", ha="right", transform=ax.transAxes,
+            )
+            ax.text(
+                0.20, y, label,
+                fontsize=T.FONT_SIZE_LEGEND,
+                va="center", ha="left", transform=ax.transAxes,
+            )
+        else:
+            ax.text(
+                0.08, y, num_text,
+                fontsize=T.FONT_SIZE_LEGEND, fontweight="bold",
+                va="center", ha="right", transform=ax.transAxes,
+            )
+            ax.text(
+                0.15, y, label,
+                fontsize=T.FONT_SIZE_LEGEND,
+                va="center", ha="left", transform=ax.transAxes,
+            )
+
+    # Edge-type legend at bottom
+    legend_handles = [
+        Line2D([0], [0], color=edge_color_pos, linewidth=2,
+               linestyle="solid", label="Positive"),
+        Line2D([0], [0], color=edge_color_neg, linewidth=2,
+               linestyle="dashed", label="Negative"),
+    ]
+    ax.legend(
+        handles=legend_handles, loc="lower left",
+        fontsize=T.FONT_SIZE_LEGEND, frameon=False,
+        bbox_to_anchor=(0.0, 0.0),
+    )
+
+
 def _plot_network_panels(
     panels: list[tuple[str, object, bool]],
     *,
@@ -47,6 +126,7 @@ def _plot_network_panels(
     figsize: tuple[float, float] | None = None,
     seed: int = 42,
     suptitle: str = "",
+    show_legend: bool = True,
     **kwargs,
 ) -> Figure:
     """Plot multiple network panels side by side with a shared layout.
@@ -61,11 +141,13 @@ def _plot_network_panels(
         Network to compute layout from. If None, uses the first undirected
         network in panels, or the first network.
     figsize : tuple, optional
-        Figure size. Defaults to (6*n_panels, 6).
+        Figure size. Defaults to (7*n_panels, 6).
     seed : int
         Random seed for layout.
     suptitle : str
         Figure super-title.
+    show_legend : bool
+        If True, add a numbered variable legend panel on the right.
     **kwargs
         Additional drawing keyword arguments passed to ``_draw_network_on_ax``.
 
@@ -74,16 +156,26 @@ def _plot_network_panels(
     Figure
     """
     n = len(panels)
-    if figsize is None:
-        figsize = (6 * n, 6)
 
-    fig, axes = plt.subplots(1, n, figsize=figsize)
-    if n == 1:
-        axes = [axes]
+    if figsize is None:
+        w = T.FIGSIZE_PANEL_WIDTH * n
+        if show_legend:
+            w += T.FIGSIZE_PANEL_WIDTH * 0.35
+        figsize = (w, T.FIGSIZE_PANEL_HEIGHT)
+
+    if show_legend:
+        width_ratios = [1] * n + [0.3]
+        fig, axes = plt.subplots(
+            1, n + 1, figsize=figsize,
+            gridspec_kw={"width_ratios": width_ratios},
+        )
+    else:
+        fig, axes = plt.subplots(1, n, figsize=figsize)
+        if n == 1:
+            axes = [axes]
 
     # Determine layout source network
     if layout_network is None:
-        # Prefer first undirected network
         for _, net, directed in panels:
             if not directed:
                 layout_network = net
@@ -93,33 +185,54 @@ def _plot_network_panels(
 
     pos = _compute_layout(layout_network, layout, seed)
 
-    for ax, (title, net, directed) in zip(axes, panels):
-        _draw_network_on_ax(net, ax, pos, directed=directed, **kwargs)
-        ax.set_title(f"{title} (n={net.n_observations})", fontsize=11)
+    plot_axes = axes[:n] if show_legend else axes
+    for ax, (title, net, directed) in zip(plot_axes, panels):
+        _draw_network_on_ax(net, ax, pos, directed=directed,
+                            show_legend=show_legend, **kwargs)
+        ax.set_title(f"{title} (n={net.n_observations})",
+                     fontsize=T.PANEL_TITLE_FONT_SIZE)
+
+    if show_legend:
+        labels = panels[0][1].labels
+        _draw_legend_panel(
+            axes[-1], labels,
+            edge_color_pos=kwargs.get("edge_color_pos", T.EDGE_COLOR_POS),
+            edge_color_neg=kwargs.get("edge_color_neg", T.EDGE_COLOR_NEG),
+        )
 
     if suptitle:
-        fig.suptitle(suptitle, fontsize=13)
+        fig.suptitle(suptitle, fontsize=T.SUPTITLE_FONT_SIZE)
     fig.tight_layout()
     return fig
 
 
-def _draw_network_on_ax(net, ax, pos, *, directed=False, **kwargs):
+def _draw_network_on_ax(net, ax, pos, *, directed=False, show_legend=True,
+                         **kwargs):
     """Draw a network on given axes with pre-computed positions."""
-    node_color = kwargs.get("node_color", "#87CEEB")
-    edge_color_pos = kwargs.get("edge_color_pos", "#2166AC")
-    edge_color_neg = kwargs.get("edge_color_neg", "#B2182B")
-    max_edge_width = kwargs.get("max_edge_width", 3.0)
-    min_edge_width = kwargs.get("min_edge_width", 0.3)
-    font_size = kwargs.get("font_size", 8)
-    node_size = kwargs.get("node_size", 300)
+    node_color = kwargs.get("node_color", T.NODE_FILL_COLOR)
+    edge_color_pos = kwargs.get("edge_color_pos", T.EDGE_COLOR_POS)
+    edge_color_neg = kwargs.get("edge_color_neg", T.EDGE_COLOR_NEG)
+    max_edge_width = kwargs.get("max_edge_width", T.EDGE_WIDTH_MAX)
+    min_edge_width = kwargs.get("min_edge_width", T.EDGE_WIDTH_MIN)
+    font_size = kwargs.get("font_size", T.FONT_SIZE_NODE)
+    node_size = kwargs.get("node_size", T.NODE_SIZE_DEFAULT)
 
     G = net.to_networkx()
 
     nx.draw_networkx_nodes(
         G, pos, ax=ax, node_size=node_size, node_color=node_color,
-        edgecolors="#333333", linewidths=1.0,
+        edgecolors=T.NODE_BORDER_COLOR, linewidths=T.NODE_BORDER_WIDTH,
     )
-    nx.draw_networkx_labels(G, pos, ax=ax, font_size=font_size, font_weight="bold")
+
+    # Numbered labels when legend is shown, full labels otherwise
+    if show_legend:
+        label_map = {label: str(i + 1) for i, label in enumerate(net.labels)}
+    else:
+        label_map = {label: label for label in net.labels}
+    nx.draw_networkx_labels(
+        G, pos, labels=label_map, ax=ax,
+        font_size=font_size, font_weight=T.FONT_WEIGHT_NODE,
+    )
 
     edges = list(G.edges(data=True))
     if edges:
@@ -129,10 +242,11 @@ def _draw_network_on_ax(net, ax, pos, *, directed=False, **kwargs):
 
         for (u, v, d), w in zip(edges, widths):
             color = edge_color_pos if d["weight"] >= 0 else edge_color_neg
-            style = "solid" if d["weight"] >= 0 else "dashed"
+            style = T.EDGE_STYLE_POS if d["weight"] >= 0 else T.EDGE_STYLE_NEG
             edge_kwargs = dict(
                 edgelist=[(u, v)], ax=ax,
-                width=float(w), edge_color=color, style=style, alpha=0.7,
+                width=float(w), edge_color=color, style=style,
+                alpha=T.EDGE_ALPHA,
             )
             if directed:
                 edge_kwargs.update(

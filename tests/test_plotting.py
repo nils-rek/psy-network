@@ -38,6 +38,50 @@ class TestNetworkPlot:
         plt.close(fig)
 
 
+class TestNetworkPlotLegend:
+    def test_legend_shown_by_default(self, small_data):
+        net = estimate_network(small_data, method="cor")
+        fig = plot_network(net)
+        # Should have 2 axes: network + legend panel
+        assert len(fig.axes) == 2
+        plt.close(fig)
+
+    def test_legend_disabled(self, small_data):
+        net = estimate_network(small_data, method="cor")
+        fig = plot_network(net, show_legend=False)
+        assert len(fig.axes) == 1
+        plt.close(fig)
+
+    def test_numbered_labels(self, small_data):
+        net = estimate_network(small_data, method="cor")
+        fig = plot_network(net)
+        # Network axes is the first one; node labels should be numeric
+        net_ax = fig.axes[0]
+        texts = [t.get_text() for t in net_ax.texts]
+        assert all(t.isdigit() for t in texts if t.strip())
+        plt.close(fig)
+
+    def test_custom_ax_no_side_legend(self, small_data):
+        net = estimate_network(small_data, method="cor")
+        fig, ax = plt.subplots()
+        plot_network(net, ax=ax, show_legend=True)
+        # When ax is provided, no extra axes are created
+        assert len(fig.axes) == 1
+        plt.close(fig)
+
+
+class TestThemeConstants:
+    def test_theme_constants_accessible(self):
+        from psynet.plotting._theme import (
+            EDGE_COLOR_POS, EDGE_COLOR_NEG, NODE_FILL_COLOR,
+            NODE_SIZE_DEFAULT, EDGE_WIDTH_MAX, ACCENT_COLORS,
+        )
+        assert isinstance(NODE_SIZE_DEFAULT, (int, float))
+        assert NODE_SIZE_DEFAULT > 0
+        assert isinstance(ACCENT_COLORS, list)
+        assert len(ACCENT_COLORS) >= 5
+
+
 class TestCentralityPlot:
     def test_default_plot(self, small_data):
         net = estimate_network(small_data, method="cor")

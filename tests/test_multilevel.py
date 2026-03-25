@@ -249,10 +249,11 @@ class TestMultilevelPlotting:
         fig = result.plot()
         assert isinstance(fig, Figure)
 
-    def test_three_axes(self, multilevel_data):
+    def test_three_network_panels(self, multilevel_data):
         result = estimate_multilevel_network(multilevel_data, "subject", beep="beep")
         fig = result.plot()
-        assert len(fig.axes) == 3
+        # 3 network panels + 1 legend panel
+        assert len(fig.axes) == 4
 
 
 # ---------------------------------------------------------------------------

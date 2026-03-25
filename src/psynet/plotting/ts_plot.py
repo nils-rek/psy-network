@@ -18,6 +18,7 @@ def plot_ts_networks(
     shared_layout: bool = True,
     figsize: tuple[float, float] | None = None,
     seed: int = 42,
+    show_legend: bool = True,
     **kwargs,
 ) -> Figure:
     """Plot temporal and contemporaneous networks side by side.
@@ -34,6 +35,8 @@ def plot_ts_networks(
         Figure size.
     seed : int
         Random seed for layout.
+    show_legend : bool
+        If True, add a numbered variable legend panel on the right.
     **kwargs
         Additional drawing keyword arguments.
 
@@ -41,9 +44,6 @@ def plot_ts_networks(
     -------
     Figure
     """
-    if figsize is None:
-        figsize = (12, 6)
-
     panels = [
         ("Temporal", ts_net.temporal, True),
         ("Contemporaneous", ts_net.contemporaneous, False),
@@ -56,5 +56,6 @@ def plot_ts_networks(
         figsize=figsize,
         seed=seed,
         suptitle="Time-Series Network (graphicalVAR)",
+        show_legend=show_legend,
         **kwargs,
     )

@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ._drawing import _draw_network_on_ax
+from . import _theme as T
+from ._drawing import _compute_layout, _draw_network_on_ax, _draw_legend_panel
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -22,6 +23,7 @@ def plot_group_networks(
     shared_layout: bool = True,
     figsize: tuple[float, float] | None = None,
     seed: int = 42,
+    show_legend: bool = True,
     **kwargs,
 ) -> Figure:
     """Plot all group networks side by side.
@@ -38,57 +40,68 @@ def plot_group_networks(
         Figure size.
     seed : int
         Random seed for layout.
+    show_legend : bool
+        If True, add a numbered variable legend panel on the right.
     **kwargs
-        Additional keyword arguments passed to ``plot_network``.
+        Additional keyword arguments passed to ``_draw_network_on_ax``.
 
     Returns
     -------
     Figure
     """
-    from .network_plot import plot_network
-    import networkx as nx
-
     K = group_net.n_groups
+
     if figsize is None:
-        figsize = (6 * K, 6)
+        w = T.FIGSIZE_PANEL_WIDTH * K
+        if show_legend:
+            w += T.FIGSIZE_PANEL_WIDTH * 0.35
+        figsize = (w, T.FIGSIZE_PANEL_HEIGHT)
 
-    fig, axes = plt.subplots(1, K, figsize=figsize)
-    if K == 1:
-        axes = [axes]
+    if show_legend:
+        width_ratios = [1] * K + [0.3]
+        fig, axes = plt.subplots(
+            1, K + 1, figsize=figsize,
+            gridspec_kw={"width_ratios": width_ratios},
+        )
+    else:
+        fig, axes = plt.subplots(1, K, figsize=figsize)
+        if K == 1:
+            axes = [axes]
 
-    # Compute shared layout from first group if requested
+    # Compute shared layout from first group
     shared_pos = None
     if shared_layout:
         first_net = group_net[group_net.group_labels[0]]
-        G = first_net.to_networkx()
-        layout_funcs = {
-            "spring": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
-            "fruchterman_reingold": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
-            "circular": lambda: nx.circular_layout(G),
-            "kamada_kawai": lambda: nx.kamada_kawai_layout(
-                G, dist={n: {m: 1.0 / abs(G[n][m]["weight"])
-                             if abs(G[n][m]["weight"]) > 0 else 10.0
-                             for m in G[n]} for n in G}
-            ),
-        }
-        shared_pos = layout_funcs.get(layout, layout_funcs["spring"])()
+        shared_pos = _compute_layout(first_net, layout, seed)
 
+    plot_axes = axes[:K] if show_legend else axes
     for i, label in enumerate(group_net.group_labels):
         net = group_net[label]
-        ax = axes[i]
+        ax = plot_axes[i]
 
         if shared_pos is not None:
-            # Draw manually using shared positions
-            _draw_network_on_ax(net, ax, shared_pos, **kwargs)
+            _draw_network_on_ax(net, ax, shared_pos,
+                                show_legend=show_legend, **kwargs)
         else:
-            plot_network(net, ax=ax, layout=layout, seed=seed, **kwargs)
+            from .network_plot import plot_network
+            plot_network(net, ax=ax, layout=layout, seed=seed,
+                         show_legend=False, **kwargs)
 
-        ax.set_title(f"{label} (n={net.n_observations})", fontsize=11)
+        ax.set_title(f"{label} (n={net.n_observations})",
+                     fontsize=T.PANEL_TITLE_FONT_SIZE)
+
+    if show_legend:
+        first_net = group_net[group_net.group_labels[0]]
+        _draw_legend_panel(
+            axes[-1], first_net.labels,
+            edge_color_pos=kwargs.get("edge_color_pos", T.EDGE_COLOR_POS),
+            edge_color_neg=kwargs.get("edge_color_neg", T.EDGE_COLOR_NEG),
+        )
 
     fig.suptitle(
         f"Group Networks (JGL-{group_net.penalty}, "
-        f"λ₁={group_net.lambda1:.4f}, λ₂={group_net.lambda2:.4f})",
-        fontsize=13,
+        f"\u03bb\u2081={group_net.lambda1:.4f}, \u03bb\u2082={group_net.lambda2:.4f})",
+        fontsize=T.SUPTITLE_FONT_SIZE,
     )
     fig.tight_layout()
     return fig
@@ -148,10 +161,11 @@ def plot_group_edge_accuracy(
             y_pos, gsummary["ci_lower"].values, gsummary["ci_upper"].values,
             color="#CCCCCC", linewidth=2,
         )
-        ax.scatter(gsummary["mean"].values, y_pos, color="#2166AC", s=15, zorder=3)
+        ax.scatter(gsummary["mean"].values, y_pos,
+                   color=T.ACCENT_COLORS[0], s=15, zorder=3)
         if "sample" in gsummary.columns:
             ax.scatter(
-                gsummary["sample"].values, y_pos, color="#B2182B",
+                gsummary["sample"].values, y_pos, color=T.ACCENT_COLORS[1],
                 s=15, zorder=4, marker="D",
             )
 
@@ -161,7 +175,7 @@ def plot_group_edge_accuracy(
         ax.set_xlabel("Edge weight")
         ax.set_title(f"{group}")
 
-    fig.suptitle("Group Edge Accuracy (Bootstrap CIs)", fontsize=12)
+    fig.suptitle("Group Edge Accuracy (Bootstrap CIs)", fontsize=T.TITLE_FONT_SIZE)
     fig.tight_layout()
     return fig
 
@@ -199,7 +213,6 @@ def plot_group_centrality_comparison(
         figsize = (8, max(4, n_nodes * 0.4))
 
     fig, ax = plt.subplots(figsize=figsize)
-    colors = ["#2166AC", "#B2182B", "#4DAF4A", "#FF7F00", "#984EA3"]
     bar_height = 0.8 / len(groups)
 
     for g_idx, group in enumerate(groups):
@@ -208,7 +221,8 @@ def plot_group_centrality_comparison(
         values = [gdata.loc[node, statistic] if node in gdata.index else 0 for node in nodes]
         ax.barh(
             y_positions, values, height=bar_height * 0.9,
-            color=colors[g_idx % len(colors)], label=group, alpha=0.8,
+            color=T.ACCENT_COLORS[g_idx % len(T.ACCENT_COLORS)],
+            label=group, alpha=0.8,
         )
 
     ax.set_yticks(np.arange(n_nodes))

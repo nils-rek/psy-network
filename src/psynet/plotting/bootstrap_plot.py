@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 
+from . import _theme as T
+
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
     from ..bootstrap.results import BootstrapResult
@@ -60,11 +62,12 @@ def plot_edge_accuracy(
         color="#CCCCCC", linewidth=2,
     )
     # Bootstrap mean
-    ax.scatter(summary["mean"].values, y_pos, color="#2166AC", s=15, zorder=3, label="Boot mean")
+    ax.scatter(summary["mean"].values, y_pos, color=T.ACCENT_COLORS[0],
+               s=15, zorder=3, label="Boot mean")
     # Sample value
     if "sample" in summary.columns:
-        ax.scatter(summary["sample"].values, y_pos, color="#B2182B", s=15,
-                   zorder=4, marker="D", label="Sample")
+        ax.scatter(summary["sample"].values, y_pos, color=T.ACCENT_COLORS[1],
+                   s=15, zorder=4, marker="D", label="Sample")
 
     ax.set_yticks(y_pos)
     ax.set_yticklabels(summary["edge_label"].values, fontsize=6)
@@ -106,7 +109,6 @@ def plot_centrality_stability(
     if statistics is None:
         statistics = sorted(df["statistic"].unique())
 
-    colors = ["#2166AC", "#B2182B", "#4DAF4A", "#FF7F00"]
     fig, ax = plt.subplots(figsize=figsize)
 
     for i, stat in enumerate(statistics):
@@ -116,7 +118,7 @@ def plot_centrality_stability(
         lower = grouped.quantile(0.025)
         upper = grouped.quantile(0.975)
 
-        color = colors[i % len(colors)]
+        color = T.ACCENT_COLORS[i % len(T.ACCENT_COLORS)]
         props = means.index.values
         ax.plot(props, means.values, color=color, label=stat, linewidth=1.5)
         ax.fill_between(props, lower.values, upper.values, color=color, alpha=0.15)
