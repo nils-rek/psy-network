@@ -360,11 +360,13 @@ class TestMultilevelNanHandling:
         assert isinstance(result, MultilevelNetwork)
 
     def test_nan_warning_without_beep(self):
-        """Should warn when dropping NaN without beep column."""
+        """Should warn when dropping all-NaN rows without beep column."""
         from psynet.datasets import make_multilevel_data
         df = make_multilevel_data(n_subjects=5, n_timepoints=30, p=3, seed=0)
-        df.iloc[0, 0] = np.nan
+        # Set ALL variable columns to NaN for one row (triggers how="all" drop)
         var_cols = validate_multilevel_data(df, "subject")
+        for col in var_cols:
+            df.iloc[0, df.columns.get_loc(col)] = np.nan
         with pytest.warns(UserWarning, match="NaN rows were dropped"):
             make_multilevel_lag_data(df, var_cols, "subject")
 

@@ -46,7 +46,9 @@ def estimate_multilevel_contemporaneous(
     Network
         Undirected contemporaneous network.
     """
-    residuals = residuals_df[var_cols].values
+    # Drop rows with NaN (from per-model listwise deletion in temporal step)
+    residuals_clean = residuals_df[var_cols].dropna()
+    residuals = residuals_clean.values
     T, p = residuals.shape
     cormat = np.corrcoef(residuals, rowvar=False)
 

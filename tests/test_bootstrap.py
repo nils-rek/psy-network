@@ -108,28 +108,22 @@ class TestCaseDroppingBootstrap:
 
 
 class TestCSCoefficientMethod:
-    """Verify CS-coefficient uses proportion-of-samples (not quantile) method."""
+    """Verify CS-coefficient uses mean-correlation method matching R's corStability()."""
 
-    def test_proportion_of_samples_method(self):
-        """Construct a scenario where quantile and proportion-of-samples diverge."""
+    def test_mean_correlation_method(self):
+        """CS-coefficient should use mean correlation, not proportion of samples."""
         from psynet.bootstrap.results import BootstrapResult
         from psynet.bootstrap.stability import cs_coefficient
         from psynet.network import Network
 
-        # Create a minimal BootstrapResult with hand-crafted case_drop_correlations.
-        # 10 bootstrap correlations at proportion=0.75 (retained):
-        # 9 above 0.7, 1 below → 90% above threshold.
-        # Proportion-of-samples: 0.90 >= 0.95? No → fail
-        # Quantile(0.05) of sorted values: 5th percentile ≈ 0.68 → also fail
-        # Now try proportion=0.50 with all 10 above 0.7 → 100% above → pass
         records = []
-        # prop=0.75: 9/10 above threshold (90% < 95% needed)
+        # prop=0.75: mean correlation = (0.65 + 0.85*9)/10 = 0.83 >= 0.7 → passes
         corrs_75 = [0.65] + [0.85] * 9
         for i, c in enumerate(corrs_75):
             records.append({"proportion": 0.75, "statistic": "strength",
                             "boot_id": i, "correlation": c})
-        # prop=0.50: 10/10 above threshold (100% >= 95%)
-        corrs_50 = [0.80] * 10
+        # prop=0.50: mean correlation = 0.60 < 0.7 → fails
+        corrs_50 = [0.60] * 10
         for i, c in enumerate(corrs_50):
             records.append({"proportion": 0.50, "statistic": "strength",
                             "boot_id": i, "correlation": c})
@@ -143,9 +137,10 @@ class TestCSCoefficientMethod:
             case_drop_correlations=pd.DataFrame(records),
         )
 
-        cs = cs_coefficient(br, "strength", threshold=0.7, quantile=0.05)
-        # prop=0.75 fails (90% < 95%), prop=0.50 passes → dropped = 1 - 0.50 = 0.50
-        assert cs == pytest.approx(0.50)
+        cs = cs_coefficient(br, "strength", threshold=0.7)
+        # prop=0.75 passes (mean=0.83>=0.7), dropped = 1-0.75 = 0.25
+        # prop=0.50 fails (mean=0.60<0.7)
+        assert cs == pytest.approx(0.25)
 
     def test_integer_proportions_in_case_drop(self, small_data):
         """Proportions from case-dropping bootstrap should match integer sample sizes."""

@@ -139,9 +139,10 @@ def estimate_multilevel_network(
         n_jobs=n_cores,
     )
 
-    # Step 3: Between-subjects network from subject means
+    # Step 3: Between-subjects network from random intercepts (or raw means)
     between_net = estimate_between_subjects(
         data, var_cols, subject,
+        intercepts=temporal_result.intercepts,
         gamma=gamma,
         n_lambda=n_lambda,
         lambda_min_ratio=lambda_min_ratio,

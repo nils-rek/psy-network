@@ -109,7 +109,7 @@ def make_multilevel_lag_data(
     nan_dropped = False
     for subj_id, subj_data in data.groupby(subject):
         n_before = len(subj_data)
-        subj_data = subj_data.dropna(subset=var_cols).reset_index(drop=True)
+        subj_data = subj_data.dropna(subset=var_cols, how="all").reset_index(drop=True)
         if len(subj_data) < n_before:
             nan_dropped = True
         values = subj_data[var_cols].values
