@@ -24,6 +24,7 @@ def plot_group_networks(
     figsize: tuple[float, float] | None = None,
     seed: int = 42,
     show_legend: bool = True,
+    legend_title: str | None = T.LEGEND_TITLE_DEFAULT,
     **kwargs,
 ) -> Figure:
     """Plot all group networks side by side.
@@ -42,6 +43,9 @@ def plot_group_networks(
         Random seed for layout.
     show_legend : bool
         If True, add a numbered variable legend panel on the right.
+    legend_title : str or None
+        Header text for the legend panel (default ``"Legend"``).
+        Pass ``None`` to suppress the header.
     **kwargs
         Additional keyword arguments passed to ``_draw_network_on_ax``.
 
@@ -96,6 +100,7 @@ def plot_group_networks(
             axes[-1], first_net.labels,
             edge_color_pos=kwargs.get("edge_color_pos", T.EDGE_COLOR_POS),
             edge_color_neg=kwargs.get("edge_color_neg", T.EDGE_COLOR_NEG),
+            legend_title=legend_title,
         )
 
     fig.suptitle(

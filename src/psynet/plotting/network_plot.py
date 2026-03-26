@@ -33,6 +33,7 @@ def plot_network(
     figsize: tuple[float, float] = T.FIGSIZE_SINGLE,
     seed: int = 42,
     show_legend: bool = True,
+    legend_title: str | None = T.LEGEND_TITLE_DEFAULT,
 ) -> Figure:
     """Plot a psychometric network.
 
@@ -62,6 +63,9 @@ def plot_network(
         Random seed for spring layout.
     show_legend : bool
         If True, show a side panel mapping numbered nodes to variable names.
+    legend_title : str or None
+        Header text for the legend panel (default ``"Legend"``).
+        Pass ``None`` to suppress the header.
 
     Returns
     -------
@@ -154,6 +158,7 @@ def plot_network(
             legend_ax, net.labels,
             edge_color_pos=edge_color_pos,
             edge_color_neg=edge_color_neg,
+            legend_title=legend_title,
         )
     elif ax is not None and show_legend:
         # Inline edge-type legend when user provides their own axes

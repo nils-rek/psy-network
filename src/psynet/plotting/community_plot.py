@@ -34,6 +34,7 @@ def plot_community(
     figsize: tuple[float, float] = T.FIGSIZE_SINGLE,
     seed: int = 42,
     show_legend: bool = True,
+    legend_title: str | None = T.LEGEND_TITLE_DEFAULT,
 ) -> Figure:
     """Plot a network with nodes colored by community.
 
@@ -65,6 +66,9 @@ def plot_community(
         Random seed for spring layout.
     show_legend : bool
         Whether to show a legend with community colors and variable names.
+    legend_title : str or None
+        Header text for the legend panel (default ``"Legend"``).
+        Pass ``None`` to suppress the header.
 
     Returns
     -------
@@ -151,6 +155,8 @@ def plot_community(
             edge_color_pos=edge_color_pos,
             edge_color_neg=edge_color_neg,
             community_colors=community_node_colors,
+            communities=communities,
+            legend_title=legend_title,
         )
     elif ax is not None and show_legend:
         # Inline community legend when user provides their own axes

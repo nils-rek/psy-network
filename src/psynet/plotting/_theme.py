@@ -23,6 +23,10 @@ EDGE_STYLE_NEG = (0, (5, 3))    # dash pattern (offset, (on, off))
 # ── Fonts ──────────────────────────────────────────────────────────
 FONT_SIZE_NODE = 9
 FONT_SIZE_LEGEND = 8.5
+LEGEND_STEP = 0.04              # vertical spacing between legend entries (axes frac)
+LEGEND_HEADER_FONT_SIZE = 9.5
+LEGEND_SUBHEADING_FONT_SIZE = 9
+LEGEND_TITLE_DEFAULT = "Legend"
 FONT_WEIGHT_NODE = "bold"
 
 # ── Figure defaults ────────────────────────────────────────────────

@@ -42,6 +42,40 @@ def _compute_layout(network, layout: str = "spring", seed: int = 42) -> dict:
     return layout_funcs.get(layout, layout_funcs["spring"])()
 
 
+def _draw_one_entry(ax, y, index, label, color=None):
+    """Draw a single numbered legend entry at vertical position *y*."""
+    num_text = f"{index + 1}:"
+    if color is not None:
+        ax.plot(
+            0.05, y, "o",
+            color=color,
+            markersize=7,
+            transform=ax.transAxes,
+            clip_on=False,
+        )
+        ax.text(
+            0.17, y, num_text,
+            fontsize=T.FONT_SIZE_LEGEND, fontweight="bold",
+            va="center", ha="right", transform=ax.transAxes,
+        )
+        ax.text(
+            0.20, y, label,
+            fontsize=T.FONT_SIZE_LEGEND,
+            va="center", ha="left", transform=ax.transAxes,
+        )
+    else:
+        ax.text(
+            0.10, y, num_text,
+            fontsize=T.FONT_SIZE_LEGEND, fontweight="bold",
+            va="center", ha="right", transform=ax.transAxes,
+        )
+        ax.text(
+            0.15, y, label,
+            fontsize=T.FONT_SIZE_LEGEND,
+            va="center", ha="left", transform=ax.transAxes,
+        )
+
+
 def _draw_legend_panel(
     ax,
     labels: list[str],
@@ -49,6 +83,8 @@ def _draw_legend_panel(
     edge_color_pos: str = T.EDGE_COLOR_POS,
     edge_color_neg: str = T.EDGE_COLOR_NEG,
     community_colors: list | None = None,
+    communities=None,
+    legend_title: str | None = T.LEGEND_TITLE_DEFAULT,
 ):
     """Draw a numbered variable-name legend on a dedicated axes.
 
@@ -62,49 +98,67 @@ def _draw_legend_panel(
         Colors for the edge-type legend entries.
     community_colors : list or None
         If provided, draw a colored marker dot for each variable.
+    communities : pd.Series or None
+        Community assignments (index=node labels, values=community IDs).
+        When provided alongside *community_colors*, entries are grouped
+        under community subheadings.
+    legend_title : str or None
+        Header text drawn at the top of the legend panel.
+        Pass ``None`` to suppress.
     """
     ax.axis("off")
-    n = len(labels)
-    # Leave space at bottom for edge-type legend
-    top = 0.95
-    bottom = 0.15
-    step = (top - bottom) / max(n, 1)
 
-    for i, label in enumerate(labels):
-        y = top - i * step
-        num_text = f"{i + 1}"
+    # --- compute how many visual lines we need ---
+    n_lines = float(len(labels))
+    has_header = legend_title is not None
+    has_groups = communities is not None and community_colors is not None
+    if has_header:
+        n_lines += 1.5  # header + extra gap
+    if has_groups:
+        n_comms = len(communities.unique())
+        n_lines += n_comms * 1.5  # subheading + gap per community
 
-        if community_colors is not None:
-            ax.plot(
-                0.05, y, "o",
-                color=community_colors[i],
-                markersize=7,
+    available = 0.95 - 0.15  # top − bottom reserve for edge legend
+    step = min(T.LEGEND_STEP, available / max(n_lines, 1))
+
+    y = 0.95
+
+    # --- header ---
+    if has_header:
+        ax.text(
+            0.05, y, legend_title,
+            fontsize=T.LEGEND_HEADER_FONT_SIZE, fontweight="bold",
+            va="center", ha="left", transform=ax.transAxes,
+        )
+        y -= step * 1.5
+
+    # --- entries ---
+    if has_groups:
+        comm_ids = sorted(communities.unique())
+        for comm_id in comm_ids:
+            # subheading
+            y -= step * 0.5
+            ax.text(
+                0.05, y, f"Community {comm_id}",
+                fontsize=T.LEGEND_SUBHEADING_FONT_SIZE, fontweight="bold",
+                fontstyle="italic", va="center", ha="left",
                 transform=ax.transAxes,
-                clip_on=False,
             )
-            ax.text(
-                0.15, y, num_text,
-                fontsize=T.FONT_SIZE_LEGEND, fontweight="bold",
-                va="center", ha="right", transform=ax.transAxes,
-            )
-            ax.text(
-                0.20, y, label,
-                fontsize=T.FONT_SIZE_LEGEND,
-                va="center", ha="left", transform=ax.transAxes,
-            )
-        else:
-            ax.text(
-                0.08, y, num_text,
-                fontsize=T.FONT_SIZE_LEGEND, fontweight="bold",
-                va="center", ha="right", transform=ax.transAxes,
-            )
-            ax.text(
-                0.15, y, label,
-                fontsize=T.FONT_SIZE_LEGEND,
-                va="center", ha="left", transform=ax.transAxes,
-            )
+            y -= step
+            # entries in this community, preserving original label order
+            for i, label in enumerate(labels):
+                if communities.get(label) != comm_id:
+                    continue
+                _draw_one_entry(ax, y, i, label,
+                                color=community_colors[i])
+                y -= step
+    else:
+        for i, label in enumerate(labels):
+            color = community_colors[i] if community_colors is not None else None
+            _draw_one_entry(ax, y, i, label, color=color)
+            y -= step
 
-    # Edge-type legend at bottom
+    # --- edge-type legend at bottom ---
     legend_handles = [
         Line2D([0], [0], color=edge_color_pos, linewidth=2,
                linestyle="solid", label="Positive"),
@@ -198,6 +252,7 @@ def _plot_network_panels(
             axes[-1], labels,
             edge_color_pos=kwargs.get("edge_color_pos", T.EDGE_COLOR_POS),
             edge_color_neg=kwargs.get("edge_color_neg", T.EDGE_COLOR_NEG),
+            legend_title=kwargs.get("legend_title", T.LEGEND_TITLE_DEFAULT),
         )
 
     if suptitle:
