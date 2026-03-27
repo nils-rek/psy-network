@@ -172,6 +172,34 @@ class TestMultilevelBetweenSubjects:
         result = estimate_multilevel_network(multilevel_data, "subject", beep="beep")
         assert result.between_subjects.n_observations == 10
 
+    def test_between_gamma_parameter(self, multilevel_data):
+        """Lower between_gamma should produce at least as many edges."""
+        result_default = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep",
+            temporal="fixed", gamma=0.5,
+        )
+        result_low = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep",
+            temporal="fixed", gamma=0.5, between_gamma=0.25,
+        )
+        edges_default = np.count_nonzero(result_default.between_subjects.adjacency)
+        edges_low = np.count_nonzero(result_low.between_subjects.adjacency)
+        assert edges_low >= edges_default
+
+    def test_between_gamma_default_uses_gamma(self, multilevel_data):
+        """When between_gamma is not set, between-subjects uses gamma."""
+        r1 = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep",
+            temporal="fixed", gamma=0.5,
+        )
+        r2 = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep",
+            temporal="fixed", gamma=0.5, between_gamma=0.5,
+        )
+        np.testing.assert_array_almost_equal(
+            r1.between_subjects.adjacency, r2.between_subjects.adjacency,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Integration: estimate_multilevel_network
@@ -340,6 +368,67 @@ class TestRandomEffectsStructure:
                 multilevel_data, "subject", beep="beep", temporal="bad",
             )
 
+    def test_warning_fallback_to_simpler_re(self, multilevel_data):
+        """Severe convergence warnings should trigger fallback to simpler RE."""
+        from unittest.mock import patch, MagicMock
+        from psynet.multilevel._temporal import _fit_one_dv, _RE_FALLBACK_CHAIN
+
+        var_cols = [c for c in multilevel_data.columns
+                    if c not in ("subject", "beep")]
+        from psynet.multilevel._validation import make_multilevel_lag_data
+        lag_data = make_multilevel_lag_data(
+            multilevel_data, var_cols, "subject", beep="beep",
+        )
+
+        severe_msg = "The Hessian matrix at the estimated parameter values is not positive definite."
+
+        def mock_try_fit(model_kwargs, method="lbfgs"):
+            """Return severe warnings for correlated/orthogonal, clean for fixed."""
+            import statsmodels.formula.api as smf
+            model = smf.mixedlm(**model_kwargs)
+            result = model.fit(reml=True, method=method)
+            # correlated has lag cols in re_formula; orthogonal has vc_formula
+            re_formula = model_kwargs.get("re_formula", "1")
+            has_vc = "vc_formula" in model_kwargs
+            is_fixed = re_formula == "1" and not has_vc
+            if is_fixed:
+                return result, []
+            else:
+                return result, [severe_msg]
+
+        with patch("psynet.multilevel._temporal._try_fit", side_effect=mock_try_fit):
+            info = _fit_one_dv(0, var_cols, lag_data, "subject",
+                               temporal_re="correlated")
+
+        assert info["actual_re"] == "fixed"
+
+    def test_accept_warned_result_at_simplest_re(self, multilevel_data):
+        """When all RE structures have warnings, accept the simplest one."""
+        from unittest.mock import patch
+        from psynet.multilevel._temporal import _fit_one_dv
+
+        var_cols = [c for c in multilevel_data.columns
+                    if c not in ("subject", "beep")]
+        from psynet.multilevel._validation import make_multilevel_lag_data
+        lag_data = make_multilevel_lag_data(
+            multilevel_data, var_cols, "subject", beep="beep",
+        )
+
+        severe_msg = "The Hessian matrix at the estimated parameter values is not positive definite."
+
+        def mock_try_fit(model_kwargs, method="lbfgs"):
+            import statsmodels.formula.api as smf
+            model = smf.mixedlm(**model_kwargs)
+            result = model.fit(reml=True, method=method)
+            return result, [severe_msg]
+
+        with patch("psynet.multilevel._temporal._try_fit", side_effect=mock_try_fit):
+            info = _fit_one_dv(0, var_cols, lag_data, "subject",
+                               temporal_re="correlated")
+
+        # Should accept the result at "fixed" (simplest), even with warnings
+        assert info["actual_re"] == "fixed"
+
 
 # ---------------------------------------------------------------------------
 # NaN handling
@@ -380,3 +469,41 @@ class TestMultilevelNanHandling:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             make_multilevel_lag_data(df, var_cols, "subject", beep="beep")
+
+
+# ---------------------------------------------------------------------------
+# Within-subject scaling
+# ---------------------------------------------------------------------------
+
+class TestScaleParameter:
+    def test_scale_runs(self, multilevel_data):
+        """scale=True should produce a valid MultilevelNetwork."""
+        # Widen the scale to simulate 0-100 VAS items
+        wide_data = multilevel_data.copy()
+        var_cols = [c for c in wide_data.columns if c not in ("subject", "beep")]
+        wide_data[var_cols] = wide_data[var_cols] * 100
+        result = estimate_multilevel_network(
+            wide_data, "subject", beep="beep", temporal="fixed", scale=True,
+        )
+        assert isinstance(result, MultilevelNetwork)
+        assert result.temporal.adjacency.shape == (4, 4)
+
+    def test_scale_does_not_mutate_input(self, multilevel_data):
+        """scale=True must not modify the caller's DataFrame."""
+        original = multilevel_data.copy()
+        estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep", temporal="fixed", scale=True,
+        )
+        pd.testing.assert_frame_equal(multilevel_data, original)
+
+    def test_scale_false_is_default(self, multilevel_data):
+        """Calling without scale should match scale=False explicitly."""
+        r1 = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep", temporal="fixed",
+        )
+        r2 = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep", temporal="fixed", scale=False,
+        )
+        np.testing.assert_array_almost_equal(
+            r1.temporal.adjacency, r2.temporal.adjacency,
+        )

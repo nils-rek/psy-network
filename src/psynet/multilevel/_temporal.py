@@ -137,7 +137,7 @@ def _fit_one_dv(
     warn_messages: list[str] = []
     actual_re = temporal_re
 
-    for re_structure in re_chain:
+    for re_idx, re_structure in enumerate(re_chain):
         try:
             model_kwargs = _build_model_kwargs(
                 formula, model_data, subject, lag_cols, re_structure,
@@ -159,7 +159,19 @@ def _fit_one_dv(
                 except Exception:
                     pass  # keep lbfgs result
 
-            break  # Accept the result (warnings are surfaced, not fatal)
+            # If still severe warnings and simpler RE structures remain,
+            # fall back instead of accepting a poorly-converged model
+            if _has_severe_warnings(warn_messages) and re_idx < len(re_chain) - 1:
+                _warnings.warn(
+                    f"mlVAR DV={dv!r}: severe convergence warnings with "
+                    f"temporal={re_structure!r}, falling back to simpler "
+                    f"random-effects structure.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                continue
+
+            break  # Accept the result
 
         except Exception:
             # Total fit failure — try next simpler RE structure

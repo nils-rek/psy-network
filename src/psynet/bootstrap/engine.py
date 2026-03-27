@@ -8,7 +8,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
-from scipy.stats import spearmanr
+from scipy.stats import pearsonr
 
 from .._types import BootstrapType, Statistic
 from ..centrality import strength, expected_influence, closeness, betweenness
@@ -109,7 +109,7 @@ def _single_case_drop(
             # Align indices
             common = orig_vals.index.intersection(boot_vals.index)
             if len(common) >= 3:
-                corr, _ = spearmanr(orig_vals[common], boot_vals[common])
+                corr, _ = pearsonr(orig_vals[common], boot_vals[common])
             else:
                 corr = np.nan
             records.append({

@@ -22,10 +22,12 @@ def estimate_multilevel_network(
     temporal_alpha: float | None = 0.05,
     temporal: str = "correlated",
     gamma: float = 0.5,
+    between_gamma: float | None = None,
     n_lambda: int = 100,
     lambda_min_ratio: float = 0.01,
     threshold: float = 1e-4,
     n_cores: int = 1,
+    scale: bool = False,
 ) -> MultilevelNetwork:
     """Estimate a multilevel VAR network from ESM data.
 
@@ -59,6 +61,11 @@ def estimate_multilevel_network(
         of variables is large and convergence issues arise.
     gamma : float
         EBIC gamma parameter for contemporaneous and between-subjects networks.
+    between_gamma : float or None
+        EBIC gamma for the between-subjects network only.  Defaults to
+        ``gamma`` if not specified.  Lower values (e.g. 0.25) produce denser
+        networks, which may be appropriate when the number of subjects is
+        small relative to the number of variables.
     n_lambda : int
         Number of lambda values in the EBIC glasso grid.
     lambda_min_ratio : float
@@ -67,12 +74,27 @@ def estimate_multilevel_network(
         Threshold for zeroing small coefficients/partial correlations.
     n_cores : int
         Number of parallel jobs for temporal estimation.
+    scale : bool
+        If True, z-score standardize each variable column within each
+        subject before estimation.  This improves optimizer convergence
+        for variables on wide scales (e.g. 0–100 VAS) by reducing the
+        chance that all models fall back to simpler random-effects
+        structures.  Coefficients represent standardised effects.
+        Default False.
 
     Returns
     -------
     MultilevelNetwork
     """
     var_cols = validate_multilevel_data(data, subject, beep=beep, day=day)
+
+    if scale:
+        data = data.copy()
+        for col in var_cols:
+            data[col] = data.groupby(subject)[col].transform(
+                lambda x: (x - x.mean()) / x.std() if x.std() > 0 else x - x.mean()
+            )
+
     lag_data = make_multilevel_lag_data(data, var_cols, subject, beep=beep, day=day)
 
     # Step 1: Temporal network via mixed-effects models
@@ -143,7 +165,7 @@ def estimate_multilevel_network(
     between_net = estimate_between_subjects(
         data, var_cols, subject,
         intercepts=temporal_result.intercepts,
-        gamma=gamma,
+        gamma=between_gamma if between_gamma is not None else gamma,
         n_lambda=n_lambda,
         lambda_min_ratio=lambda_min_ratio,
         threshold=threshold,

@@ -20,8 +20,8 @@ def cs_coefficient(
     """Compute the CS-coefficient (correlation stability coefficient).
 
     The CS-coefficient is the maximum proportion of cases that can be
-    dropped such that the *average* correlation between original and
-    subsample centralities remains ≥ *threshold*.  This matches R's
+    dropped such that the *quantile* of the bootstrap correlation
+    distribution remains ≥ *threshold*.  This matches R's
     ``corStability()`` from bootnet.
 
     Parameters
@@ -31,10 +31,12 @@ def cs_coefficient(
     statistic : str
         Centrality measure to evaluate.
     threshold : float
-        Minimum acceptable mean correlation (default 0.7).
+        Minimum acceptable correlation at the given quantile (default 0.7).
     quantile : float
-        Kept for API compatibility; not used in the mean-based method
-        that matches R's ``corStability()``.
+        Quantile of the bootstrap correlation distribution to check
+        against *threshold* (default 0.05, i.e. the 5th percentile).
+        Matches R's ``corStability(cor, statistics, p)`` where ``p``
+        defaults to 0.05.
 
     Returns
     -------
@@ -58,8 +60,8 @@ def cs_coefficient(
         prop_corrs = sub[sub["proportion"] == prop]["correlation"].dropna()
         if len(prop_corrs) == 0:
             continue
-        mean_corr = np.mean(prop_corrs)
-        if mean_corr >= threshold:
+        q_corr = np.quantile(prop_corrs, quantile)
+        if q_corr >= threshold:
             # proportion is fraction *retained*, so dropped = 1 - prop
             best_prop = max(best_prop, 1.0 - prop)
 
