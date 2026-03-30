@@ -88,6 +88,9 @@ def estimate_multilevel_network(
     """
     var_cols = validate_multilevel_data(data, subject, beep=beep, day=day)
 
+    # Keep original data for between-subjects network (subject means
+    # must be computed on unscaled data; z-scoring centres everyone at 0).
+    original_data = data
     if scale:
         data = data.copy()
         for col in var_cols:
@@ -163,7 +166,7 @@ def estimate_multilevel_network(
 
     # Step 3: Between-subjects network from random intercepts (or raw means)
     between_net = estimate_between_subjects(
-        data, var_cols, subject,
+        original_data, var_cols, subject,
         intercepts=temporal_result.intercepts,
         gamma=between_gamma if between_gamma is not None else gamma,
         n_lambda=n_lambda,
