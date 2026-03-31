@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 multilevel = ["statsmodels>=0.14"]
+lme4 = ["rpy2>=3.5"]
 dev = [
     "pytest>=7.0",
     "pytest-cov",

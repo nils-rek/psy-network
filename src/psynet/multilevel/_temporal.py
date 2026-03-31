@@ -76,7 +76,11 @@ def _build_model_kwargs(
     return model_kwargs
 
 
-def _try_fit(model_kwargs: dict, method: str = "lbfgs") -> tuple:
+def _try_fit(
+    model_kwargs: dict,
+    method: str = "lbfgs",
+    start_params: np.ndarray | None = None,
+) -> tuple:
     """Fit a mixed-effects model, capturing warnings.
 
     Returns (result, warn_messages) or raises on total failure.
@@ -84,13 +88,69 @@ def _try_fit(model_kwargs: dict, method: str = "lbfgs") -> tuple:
     with _warnings.catch_warnings(record=True) as caught:
         _warnings.simplefilter("always")
         model = smf.mixedlm(**model_kwargs)
-        result = model.fit(reml=True, method=method)
+        fit_kwargs: dict = {"reml": True, "method": method}
+        if start_params is not None:
+            fit_kwargs["start_params"] = start_params
+        result = model.fit(**fit_kwargs)
     warn_messages = [str(w.message) for w in caught]
     return result, warn_messages
 
 
+def _get_ols_start_params(model_kwargs: dict) -> np.ndarray | None:
+    """Compute warm-start parameters from OLS fit.
+
+    Returns an array sized for the full MixedLM parameter vector:
+    fixed effects from OLS, RE Cholesky parameters initialised to a
+    small positive diagonal (avoids starting at a singular point).
+    """
+    try:
+        formula = model_kwargs["formula"]
+        data = model_kwargs["data"]
+        ols_result = smf.ols(formula, data=data).fit()
+
+        model = smf.mixedlm(**model_kwargs)
+        n_params = model.k_params
+        n_fe = model.k_fe
+
+        start = np.zeros(n_params)
+        # Fill fixed-effect positions with OLS estimates
+        for i, name in enumerate(model.exog_names):
+            if name in ols_result.params.index:
+                start[i] = ols_result.params[name]
+        # Initialise RE Cholesky parameters to small positive values
+        # to avoid starting on a singular boundary
+        start[n_fe:] = 0.1
+        return start
+    except Exception:
+        return None
+
+
+def _auto_re_structure(p: int, temporal_re: str) -> str:
+    """Downgrade correlated RE when p is too large for statsmodels.
+
+    With p > 8, the correlated RE covariance has (p+1)(p+2)/2 Cholesky
+    parameters — too many for statsmodels to optimise reliably.
+    """
+    if temporal_re == "correlated" and p > 8:
+        n_chol = (p + 1) * (p + 2) // 2
+        _warnings.warn(
+            f"With p={p} variables, correlated random effects require "
+            f"estimating {n_chol} Cholesky parameters. "
+            f"Defaulting to 'orthogonal' for better convergence. "
+            f"Pass auto_re=False to override, or use engine='lme4' for "
+            f"full correlated RE with large p.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return "orthogonal"
+    return temporal_re
+
+
 # RE structures from most complex to simplest
 _RE_FALLBACK_CHAIN = ("correlated", "orthogonal", "fixed")
+
+# Optimizers to try before falling back to a simpler RE structure
+_OPTIMIZER_CHAIN = ("lbfgs", "powell", "bfgs", "nm")
 
 
 def _fit_one_dv(
@@ -145,46 +205,62 @@ def _fit_one_dv(
         except ValueError:
             raise  # Invalid temporal_re value — don't catch
 
-        try:
-            result, warn_messages = _try_fit(model_kwargs, method="lbfgs")
-            actual_re = re_structure
+        # Compute OLS warm-start once per RE structure
+        start_params = _get_ols_start_params(model_kwargs)
 
-            # If severe convergence warnings, try Nelder-Mead optimizer
-            if _has_severe_warnings(warn_messages):
-                try:
-                    result_nm, warns_nm = _try_fit(model_kwargs, method="nm")
-                    if not _has_severe_warnings(warns_nm):
-                        result = result_nm
-                        warn_messages = warns_nm
-                except Exception:
-                    pass  # keep lbfgs result
-
-            # If still severe warnings and simpler RE structures remain,
-            # fall back instead of accepting a poorly-converged model
-            if _has_severe_warnings(warn_messages) and re_idx < len(re_chain) - 1:
-                _warnings.warn(
-                    f"mlVAR DV={dv!r}: severe convergence warnings with "
-                    f"temporal={re_structure!r}, falling back to simpler "
-                    f"random-effects structure.",
-                    UserWarning,
-                    stacklevel=2,
+        # Try all optimizers before falling back to simpler RE
+        fit_succeeded = False
+        for opt_idx, optimizer in enumerate(_OPTIMIZER_CHAIN):
+            try:
+                candidate, candidate_warns = _try_fit(
+                    model_kwargs, method=optimizer, start_params=start_params,
                 )
+                if not _has_severe_warnings(candidate_warns):
+                    result = candidate
+                    warn_messages = candidate_warns
+                    actual_re = re_structure
+                    fit_succeeded = True
+                    break
+                # Keep the last candidate in case all optimizers warn
+                result = candidate
+                warn_messages = candidate_warns
+                actual_re = re_structure
+            except Exception:
+                if opt_idx == len(_OPTIMIZER_CHAIN) - 1 and result is None:
+                    # All optimizers failed for this RE structure
+                    break
                 continue
 
-            break  # Accept the result
+        if fit_succeeded:
+            break  # Accept the clean result
 
-        except Exception:
-            # Total fit failure — try next simpler RE structure
-            if re_structure == re_chain[-1]:
-                raise  # nothing left to try
+        # All optimizers produced severe warnings or failed
+        if result is not None and re_idx < len(re_chain) - 1:
             _warnings.warn(
-                f"mlVAR DV={dv!r}: fit failed with "
-                f"temporal={re_structure!r}, falling back to simpler "
-                f"random-effects structure.",
+                f"mlVAR DV={dv!r}: severe convergence warnings with "
+                f"temporal={re_structure!r} (tried {len(_OPTIMIZER_CHAIN)} "
+                f"optimizers), falling back to simpler random-effects "
+                f"structure.",
                 UserWarning,
                 stacklevel=2,
             )
             continue
+        elif result is not None:
+            break  # Last RE structure — accept whatever we have
+
+        # Total fit failure — try next simpler RE structure
+        if re_structure == re_chain[-1]:
+            raise RuntimeError(
+                f"All RE structures and optimizers failed for DV={dv!r}"
+            )
+        _warnings.warn(
+            f"mlVAR DV={dv!r}: fit failed with "
+            f"temporal={re_structure!r}, falling back to simpler "
+            f"random-effects structure.",
+            UserWarning,
+            stacklevel=2,
+        )
+        continue
 
     if result is None:
         raise RuntimeError(f"All RE structures failed for DV={dv!r}")
@@ -303,6 +379,8 @@ def estimate_multilevel_temporal(
     *,
     temporal_re: str = "correlated",
     n_cores: int = 1,
+    engine: str = "statsmodels",
+    auto_re: bool = True,
 ) -> _TemporalResult:
     """Estimate population and subject-level temporal networks via mixed-effects.
 
@@ -322,6 +400,13 @@ def estimate_multilevel_temporal(
         or ``"fixed"``.
     n_cores : int
         Number of parallel jobs for fitting models.
+    engine : str
+        Backend for mixed-effects fitting: ``"statsmodels"`` (default)
+        or ``"lme4"`` (requires rpy2 and R with lme4 + lmerTest).
+    auto_re : bool
+        When True and ``engine="statsmodels"``, automatically downgrade
+        ``"correlated"`` to ``"orthogonal"`` for p > 8 variables where
+        statsmodels cannot reliably converge.
 
     Returns
     -------
@@ -329,10 +414,23 @@ def estimate_multilevel_temporal(
     """
     p = len(var_cols)
 
-    results = Parallel(n_jobs=n_cores)(
-        delayed(_fit_one_dv)(j, var_cols, lag_data, subject, temporal_re)
-        for j in range(p)
-    )
+    # Auto-downgrade RE for large p (statsmodels only)
+    effective_re = temporal_re
+    if auto_re and engine == "statsmodels":
+        effective_re = _auto_re_structure(p, temporal_re)
+
+    if engine == "lme4":
+        from ._lme4_backend import _check_lme4_available, _fit_one_dv_lme4
+        _check_lme4_available()
+        results = [
+            _fit_one_dv_lme4(j, var_cols, lag_data, subject, effective_re)
+            for j in range(p)
+        ]
+    else:
+        results = Parallel(n_jobs=n_cores)(
+            delayed(_fit_one_dv)(j, var_cols, lag_data, subject, effective_re)
+            for j in range(p)
+        )
 
     # Assemble matrices
     fixed_coef = np.zeros((p, p))
@@ -374,7 +472,7 @@ def estimate_multilevel_temporal(
         residual_series[var_cols[j]] = res["residuals"]
 
     # Surface convergence summary to the user
-    _emit_convergence_summary(fit_info, temporal_re)
+    _emit_convergence_summary(fit_info, effective_re)
 
     # Build residuals DataFrame — each DV model may have used a different
     # subset of rows (per-model listwise deletion), so NaN fills gaps

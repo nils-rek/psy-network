@@ -21,6 +21,8 @@ def estimate_multilevel_network(
     day: str | None = None,
     temporal_alpha: float | None = 0.05,
     temporal: str = "correlated",
+    engine: str = "statsmodels",
+    auto_re: bool = True,
     gamma: float = 0.5,
     between_gamma: float | None = None,
     n_lambda: int = 100,
@@ -59,6 +61,16 @@ def estimate_multilevel_network(
         slopes), or ``"fixed"`` (random intercepts only, no random
         slopes).  Use ``"orthogonal"`` or ``"fixed"`` when the number
         of variables is large and convergence issues arise.
+    engine : str
+        Backend for mixed-effects fitting: ``"statsmodels"`` (default)
+        or ``"lme4"`` (requires rpy2 and R with lme4 + lmerTest
+        installed).  The lme4 engine uses R's optimiser which handles
+        high-dimensional random-effects structures more robustly.
+    auto_re : bool
+        When True and ``engine="statsmodels"``, automatically downgrade
+        ``"correlated"`` to ``"orthogonal"`` when the number of variables
+        exceeds 8, where statsmodels cannot reliably optimise the full
+        RE covariance.  Ignored when ``engine="lme4"``.  Default True.
     gamma : float
         EBIC gamma parameter for contemporaneous and between-subjects networks.
     between_gamma : float or None
@@ -86,6 +98,11 @@ def estimate_multilevel_network(
     -------
     MultilevelNetwork
     """
+    if engine not in ("statsmodels", "lme4"):
+        raise ValueError(
+            f"engine must be 'statsmodels' or 'lme4', got {engine!r}"
+        )
+
     var_cols = validate_multilevel_data(data, subject, beep=beep, day=day)
 
     # Keep original data for between-subjects network (subject means
@@ -103,6 +120,7 @@ def estimate_multilevel_network(
     # Step 1: Temporal network via mixed-effects models
     temporal_result = estimate_multilevel_temporal(
         lag_data, var_cols, subject, temporal_re=temporal, n_cores=n_cores,
+        engine=engine, auto_re=auto_re,
     )
 
     # Threshold small temporal coefficients

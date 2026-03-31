@@ -382,7 +382,7 @@ class TestRandomEffectsStructure:
 
         severe_msg = "The Hessian matrix at the estimated parameter values is not positive definite."
 
-        def mock_try_fit(model_kwargs, method="lbfgs"):
+        def mock_try_fit(model_kwargs, method="lbfgs", start_params=None):
             """Return severe warnings for correlated/orthogonal, clean for fixed."""
             import statsmodels.formula.api as smf
             model = smf.mixedlm(**model_kwargs)
@@ -416,7 +416,7 @@ class TestRandomEffectsStructure:
 
         severe_msg = "The Hessian matrix at the estimated parameter values is not positive definite."
 
-        def mock_try_fit(model_kwargs, method="lbfgs"):
+        def mock_try_fit(model_kwargs, method="lbfgs", start_params=None):
             import statsmodels.formula.api as smf
             model = smf.mixedlm(**model_kwargs)
             result = model.fit(reml=True, method=method)
@@ -507,3 +507,212 @@ class TestScaleParameter:
         np.testing.assert_array_almost_equal(
             r1.temporal.adjacency, r2.temporal.adjacency,
         )
+
+
+# ---------------------------------------------------------------------------
+# Optimizer chain improvements
+# ---------------------------------------------------------------------------
+
+class TestOptimizerChain:
+    def test_multiple_optimizers_tried_before_fallback(self, multilevel_data):
+        """All optimizers should be tried before falling back to simpler RE."""
+        from unittest.mock import patch, call
+        from psynet.multilevel._temporal import (
+            _fit_one_dv, _OPTIMIZER_CHAIN,
+        )
+
+        var_cols = [c for c in multilevel_data.columns
+                    if c not in ("subject", "beep")]
+        from psynet.multilevel._validation import make_multilevel_lag_data
+        lag_data = make_multilevel_lag_data(
+            multilevel_data, var_cols, "subject", beep="beep",
+        )
+
+        severe_msg = "optimization failed"
+        call_count = {"n": 0}
+
+        def mock_try_fit(model_kwargs, method="lbfgs", start_params=None):
+            call_count["n"] += 1
+            import statsmodels.formula.api as smf
+            model = smf.mixedlm(**model_kwargs)
+            result = model.fit(reml=True, method="lbfgs")
+            # Only succeed on the last optimizer for correlated RE
+            re_formula = model_kwargs.get("re_formula", "1")
+            has_vc = "vc_formula" in model_kwargs
+            is_complex = re_formula != "1" or has_vc
+            if is_complex and method != _OPTIMIZER_CHAIN[-1]:
+                return result, [severe_msg]
+            return result, []
+
+        with patch("psynet.multilevel._temporal._try_fit", side_effect=mock_try_fit):
+            info = _fit_one_dv(0, var_cols, lag_data, "subject",
+                               temporal_re="correlated")
+
+        # Should have converged on correlated (the nm optimizer succeeds)
+        assert info["actual_re"] == "correlated"
+        # All 4 optimizers should have been tried for correlated
+        assert call_count["n"] == len(_OPTIMIZER_CHAIN)
+
+    def test_warm_start_params_passed(self, multilevel_data):
+        """OLS warm-start should be computed and passed to _try_fit."""
+        from unittest.mock import patch
+        from psynet.multilevel._temporal import _fit_one_dv
+
+        var_cols = [c for c in multilevel_data.columns
+                    if c not in ("subject", "beep")]
+        from psynet.multilevel._validation import make_multilevel_lag_data
+        lag_data = make_multilevel_lag_data(
+            multilevel_data, var_cols, "subject", beep="beep",
+        )
+
+        received_start_params = []
+
+        def mock_try_fit(model_kwargs, method="lbfgs", start_params=None):
+            received_start_params.append(start_params)
+            import statsmodels.formula.api as smf
+            model = smf.mixedlm(**model_kwargs)
+            result = model.fit(reml=True, method="lbfgs")
+            return result, []  # succeed immediately
+
+        with patch("psynet.multilevel._temporal._try_fit", side_effect=mock_try_fit):
+            _fit_one_dv(0, var_cols, lag_data, "subject",
+                        temporal_re="fixed")
+
+        # At least one call should have received start_params
+        assert any(sp is not None for sp in received_start_params)
+
+
+class TestAutoReStructure:
+    def test_downgrades_large_p(self):
+        """Should downgrade correlated to orthogonal for p > 8."""
+        from psynet.multilevel._temporal import _auto_re_structure
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = _auto_re_structure(10, "correlated")
+        assert result == "orthogonal"
+
+    def test_preserves_small_p(self):
+        """Should keep correlated for p <= 8."""
+        from psynet.multilevel._temporal import _auto_re_structure
+        result = _auto_re_structure(6, "correlated")
+        assert result == "correlated"
+
+    def test_preserves_orthogonal(self):
+        """Should not change orthogonal regardless of p."""
+        from psynet.multilevel._temporal import _auto_re_structure
+        assert _auto_re_structure(20, "orthogonal") == "orthogonal"
+
+    def test_preserves_fixed(self):
+        """Should not change fixed regardless of p."""
+        from psynet.multilevel._temporal import _auto_re_structure
+        assert _auto_re_structure(20, "fixed") == "fixed"
+
+    def test_auto_re_disabled(self, multilevel_data):
+        """auto_re=False should not downgrade RE structure."""
+        # Use 10 variables to trigger auto-downgrade
+        from psynet.datasets import make_multilevel_data
+        df = make_multilevel_data(n_subjects=5, n_timepoints=30, p=10, seed=0)
+        # With auto_re=False and temporal="fixed", it should use "fixed" as-is
+        result = estimate_multilevel_network(
+            df, "subject", beep="beep", temporal="fixed", auto_re=False,
+        )
+        assert isinstance(result, MultilevelNetwork)
+
+    def test_emits_warning_on_downgrade(self):
+        """Should emit a UserWarning when downgrading."""
+        from psynet.multilevel._temporal import _auto_re_structure
+        with pytest.warns(UserWarning, match="Defaulting to 'orthogonal'"):
+            _auto_re_structure(10, "correlated")
+
+
+# ---------------------------------------------------------------------------
+# Engine parameter
+# ---------------------------------------------------------------------------
+
+class TestEngineParameter:
+    def test_invalid_engine_raises(self, multilevel_data):
+        with pytest.raises(ValueError, match="engine must be"):
+            estimate_multilevel_network(
+                multilevel_data, "subject", beep="beep", engine="bad",
+            )
+
+    def test_default_engine_is_statsmodels(self, multilevel_data):
+        """Default engine should work (statsmodels)."""
+        result = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep", temporal="fixed",
+        )
+        assert isinstance(result, MultilevelNetwork)
+
+    def test_lme4_without_rpy2_raises(self, multilevel_data):
+        """engine='lme4' without rpy2 should raise ImportError."""
+        from unittest.mock import patch
+        with patch.dict("sys.modules", {"rpy2": None, "rpy2.robjects": None}):
+            with pytest.raises(ImportError, match="rpy2"):
+                estimate_multilevel_network(
+                    multilevel_data, "subject", beep="beep", engine="lme4",
+                )
+
+
+# ---------------------------------------------------------------------------
+# lme4 backend unit tests (skip if R not available)
+# ---------------------------------------------------------------------------
+
+_has_lme4 = False
+try:
+    import rpy2.robjects
+    from rpy2.robjects.packages import importr
+    importr("lme4")
+    importr("lmerTest")
+    _has_lme4 = True
+except Exception:
+    pass
+
+
+@pytest.mark.skipif(not _has_lme4, reason="rpy2 + lme4/lmerTest not available")
+class TestLme4Backend:
+    def test_lme4_produces_valid_result(self, multilevel_data):
+        result = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep", engine="lme4",
+        )
+        assert isinstance(result, MultilevelNetwork)
+        assert result.temporal.adjacency.shape == (4, 4)
+
+    def test_lme4_matches_output_format(self, multilevel_data):
+        result = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep", engine="lme4",
+        )
+        assert result.pvalues.shape == (4, 4)
+        assert len(result.subject_temporal) == 10
+        assert result.fit_info is not None
+
+    def test_lme4_pvalues_range(self, multilevel_data):
+        result = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep", engine="lme4",
+        )
+        assert np.all(result.pvalues >= 0)
+        assert np.all(result.pvalues <= 1)
+
+    def test_lme4_fixed_re(self, multilevel_data):
+        result = estimate_multilevel_network(
+            multilevel_data, "subject", beep="beep",
+            engine="lme4", temporal="fixed",
+        )
+        assert result.temporal.adjacency.shape == (4, 4)
+
+    def test_build_lmer_formula_correlated(self):
+        from psynet.multilevel._lme4_backend import _build_lmer_formula
+        f = _build_lmer_formula("V1", ["V1_lag", "V2_lag"], "subject", "correlated")
+        assert "(V1_lag + V2_lag | subject)" in f
+
+    def test_build_lmer_formula_orthogonal(self):
+        from psynet.multilevel._lme4_backend import _build_lmer_formula
+        f = _build_lmer_formula("V1", ["V1_lag", "V2_lag"], "subject", "orthogonal")
+        assert "(1 | subject)" in f
+        assert "(0 + V1_lag | subject)" in f
+
+    def test_build_lmer_formula_fixed(self):
+        from psynet.multilevel._lme4_backend import _build_lmer_formula
+        f = _build_lmer_formula("V1", ["V1_lag", "V2_lag"], "subject", "fixed")
+        assert "(1 | subject)" in f
+        assert "V1_lag" not in f.split("(1 | subject)")[1]
