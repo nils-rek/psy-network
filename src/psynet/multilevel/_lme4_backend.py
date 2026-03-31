@@ -102,7 +102,8 @@ def _setup_r_env():
     from rpy2.robjects import pandas2ri
     from rpy2.robjects.packages import importr
 
-    pandas2ri.activate()
+    # pandas2ri.activate() is deprecated in rpy2 >= 3.6.
+    # Use converter context instead (handled at call site).
     lmerTest_pkg = importr("lmerTest")
     base_pkg = importr("base")
     return ro, pandas2ri, lmerTest_pkg, base_pkg
@@ -164,6 +165,7 @@ def _extract_lme4_results(
     actual_re: str,
     warn_messages: list[str],
     ro,
+    str_to_orig: dict | None = None,
 ) -> dict:
     """Extract fixed effects, random effects, residuals, p-values from lmer."""
     from rpy2.robjects.packages import importr
@@ -221,8 +223,10 @@ def _extract_lme4_results(
                 icpt_idx = re_colnames.index("(Intercept)")
                 re_intercept = re_df.rx(row_idx + 1, icpt_idx + 1)[0]
 
-        subject_coefs[subj_id] = subj_fixed
-        subject_intercepts[subj_id] = fixed_intercept + re_intercept
+        # Map back to original subject ID type
+        orig_id = str_to_orig[subj_id] if str_to_orig and subj_id in str_to_orig else subj_id
+        subject_coefs[orig_id] = subj_fixed
+        subject_intercepts[orig_id] = fixed_intercept + re_intercept
 
     # Residuals
     resid_r = stats_pkg.residuals(r_model)
@@ -276,14 +280,19 @@ def _fit_one_dv_lme4(
     needed_cols = [dv] + lag_cols
     model_data = lag_data.dropna(subset=needed_cols).copy()
 
+    # Build mapping from original subject IDs to string (R needs strings)
+    orig_subject_ids = model_data[subject].unique()
+    str_to_orig = {str(s): s for s in orig_subject_ids}
+
     # Ensure subject column is string for R
     model_data[subject] = model_data[subject].astype(str)
 
     ro, pandas2ri, lmerTest_pkg, base_pkg = _setup_r_env()
 
-    # Convert to R data.frame
-    from rpy2.robjects import pandas2ri as p2r
-    data_r = p2r.py2rpy(model_data)
+    # Convert to R data.frame using converter context (rpy2 >= 3.6)
+    from rpy2.robjects.conversion import localconverter
+    with localconverter(ro.default_converter + pandas2ri.converter):
+        data_r = ro.conversion.get_conversion().py2rpy(model_data)
 
     # Validate temporal_re
     if temporal_re not in _RE_FALLBACK_CHAIN:
@@ -312,7 +321,7 @@ def _fit_one_dv_lme4(
             if not _has_severe_r_warnings(warn_messages):
                 result = _extract_lme4_results(
                     r_model, j, dv, lag_cols, model_data, subject,
-                    actual_re, warn_messages, ro,
+                    actual_re, warn_messages, ro, str_to_orig,
                 )
                 return result
 
@@ -330,7 +339,7 @@ def _fit_one_dv_lme4(
             # Last RE structure — accept with warnings
             result = _extract_lme4_results(
                 r_model, j, dv, lag_cols, model_data, subject,
-                actual_re, warn_messages, ro,
+                actual_re, warn_messages, ro, str_to_orig,
             )
             return result
 

@@ -414,9 +414,9 @@ def estimate_multilevel_temporal(
     """
     p = len(var_cols)
 
-    # Auto-downgrade RE for large p (statsmodels only)
+    # Auto-downgrade RE for large p
     effective_re = temporal_re
-    if auto_re and engine == "statsmodels":
+    if auto_re:
         effective_re = _auto_re_structure(p, temporal_re)
 
     if engine == "lme4":
