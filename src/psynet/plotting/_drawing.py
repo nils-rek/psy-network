@@ -294,14 +294,15 @@ def _draw_network_on_ax(net, ax, pos, *, directed=False, show_legend=True,
         weights = np.array([abs(d["weight"]) for _, _, d in edges])
         max_w = weights.max() if weights.max() > 0 else 1.0
         widths = min_edge_width + (weights / max_w) * (max_edge_width - min_edge_width)
+        alphas = T.EDGE_ALPHA_MIN + (weights / max_w) * (T.EDGE_ALPHA_MAX - T.EDGE_ALPHA_MIN)
 
-        for (u, v, d), w in zip(edges, widths):
+        for (u, v, d), w, a in zip(edges, widths, alphas):
             color = edge_color_pos if d["weight"] >= 0 else edge_color_neg
             style = T.EDGE_STYLE_POS if d["weight"] >= 0 else T.EDGE_STYLE_NEG
             edge_kwargs = dict(
                 edgelist=[(u, v)], ax=ax,
                 width=float(w), edge_color=color, style=style,
-                alpha=T.EDGE_ALPHA,
+                alpha=float(a),
             )
             if directed:
                 edge_kwargs.update(

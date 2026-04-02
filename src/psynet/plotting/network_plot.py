@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from matplotlib.colors import to_rgba
 from matplotlib.lines import Line2D
+from matplotlib.patches import Polygon
 
 from . import _theme as T
 from ._drawing import _draw_legend_panel
@@ -17,12 +19,77 @@ if TYPE_CHECKING:
     from ..network import Network
 
 
+def _draw_centrality_aura(ax, pos, labels, centrality_values, node_sizes,
+                          node_color):
+    """Draw a tapering arc around each node encoding centrality magnitude.
+
+    The arc starts at 12 o'clock, wraps clockwise, tapers to a sharp point,
+    and fades from opaque to transparent along its length.
+    """
+    # Normalize centrality to [0, 1]
+    vals = np.asarray(centrality_values, dtype=float)
+    vmin, vmax = vals.min(), vals.max()
+    norm = (vals - vmin) / (vmax - vmin + 1e-10)
+
+    # Compute node radius in data coordinates from layout extent
+    xs = np.array([pos[label][0] for label in labels])
+    ys = np.array([pos[label][1] for label in labels])
+    span = max(xs.max() - xs.min(), ys.max() - ys.min(), 0.1)
+
+    if isinstance(node_sizes, (int, float)):
+        size_arr = np.full(len(labels), float(node_sizes))
+    else:
+        size_arr = np.asarray(node_sizes, dtype=float)
+
+    base_rgba = to_rgba(node_color)
+    n_seg = T.AURA_N_SEGMENTS
+
+    for idx, label in enumerate(labels):
+        cx, cy = pos[label]
+        r_node = span * 0.04 * np.sqrt(size_arr[idx] / T.NODE_SIZE_DEFAULT)
+        arc_angle_deg = norm[idx] * T.AURA_ARC_MAX_ANGLE
+        if arc_angle_deg < 1.0:
+            continue  # negligible arc, skip
+
+        arc_angle = np.radians(arc_angle_deg)
+        max_hw = r_node * T.AURA_WIDTH_FACTOR  # half-width at start
+        r_center = r_node * T.AURA_GAP_FACTOR  # center line radius
+
+        # Build segments: start at 90° (top), go clockwise (decreasing angle)
+        for k in range(n_seg):
+            t0 = k / n_seg
+            t1 = (k + 1) / n_seg
+            # Taper: half-width decreases to 0
+            hw0 = max_hw * (1 - t0)
+            hw1 = max_hw * (1 - t1)
+            # Angles (clockwise from top = decreasing from pi/2)
+            a0 = np.pi / 2 - t0 * arc_angle
+            a1 = np.pi / 2 - t1 * arc_angle
+            # Four corners of the wedge strip
+            verts = [
+                (cx + (r_center + hw0) * np.cos(a0),
+                 cy + (r_center + hw0) * np.sin(a0)),
+                (cx + (r_center + hw1) * np.cos(a1),
+                 cy + (r_center + hw1) * np.sin(a1)),
+                (cx + (r_center - hw1) * np.cos(a1),
+                 cy + (r_center - hw1) * np.sin(a1)),
+                (cx + (r_center - hw0) * np.cos(a0),
+                 cy + (r_center - hw0) * np.sin(a0)),
+            ]
+            alpha = T.AURA_ALPHA_START * (1 - t0)
+            color = (*base_rgba[:3], alpha)
+            patch = Polygon(verts, closed=True, facecolor=color,
+                            edgecolor="none", zorder=1)
+            ax.add_patch(patch)
+
+
 def plot_network(
     net: Network,
     *,
     layout: str = "spring",
     node_size: float | str = T.NODE_SIZE_DEFAULT,
     node_color: str = T.NODE_FILL_COLOR,
+    centrality_aura: str | None = "strength",
     edge_color_pos: str = T.EDGE_COLOR_POS,
     edge_color_neg: str = T.EDGE_COLOR_NEG,
     max_edge_width: float = T.EDGE_WIDTH_MAX,
@@ -47,6 +114,9 @@ def plot_network(
         Fixed size or a centrality measure name (e.g. ``"strength"``).
     node_color : str
         Node fill color.
+    centrality_aura : str or None
+        Centrality measure name (e.g. ``"strength"``) to draw a tapering
+        arc around each node encoding centrality. ``None`` disables the aura.
     edge_color_pos, edge_color_neg : str
         Colors for positive / negative edges.
     max_edge_width, min_edge_width : float
@@ -116,6 +186,16 @@ def plot_network(
     else:
         sizes = node_size
 
+    # Centrality aura
+    if centrality_aura is not None:
+        from ..centrality import centrality as compute_centrality
+        cent_df = compute_centrality(net)
+        if centrality_aura in cent_df.columns:
+            _draw_centrality_aura(
+                net_ax, pos, net.labels, cent_df[centrality_aura].values,
+                sizes, node_color,
+            )
+
     # Draw nodes
     nx.draw_networkx_nodes(
         G, pos, ax=net_ax, node_size=sizes, node_color=node_color,
@@ -138,14 +218,15 @@ def plot_network(
         weights = np.array([abs(d["weight"]) for _, _, d in edges])
         max_w = weights.max() if weights.max() > 0 else 1.0
         widths = min_edge_width + (weights / max_w) * (max_edge_width - min_edge_width)
+        alphas = T.EDGE_ALPHA_MIN + (weights / max_w) * (T.EDGE_ALPHA_MAX - T.EDGE_ALPHA_MIN)
 
-        for (u, v, d), w in zip(edges, widths):
+        for (u, v, d), w, a in zip(edges, widths, alphas):
             color = edge_color_pos if d["weight"] >= 0 else edge_color_neg
             style = T.EDGE_STYLE_POS if d["weight"] >= 0 else T.EDGE_STYLE_NEG
             nx.draw_networkx_edges(
                 G, pos, edgelist=[(u, v)], ax=net_ax,
                 width=float(w), edge_color=color, style=style,
-                alpha=T.EDGE_ALPHA,
+                alpha=float(a),
             )
 
     net_ax.set_title(title or f"Network ({net.method})",

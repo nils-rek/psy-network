@@ -69,6 +69,24 @@ class TestNetworkPlotLegend:
         assert len(fig.axes) == 1
         plt.close(fig)
 
+    def test_centrality_aura(self, small_data):
+        net = estimate_network(small_data, method="cor")
+        fig = plot_network(net, centrality_aura="strength")
+        assert fig is not None
+        plt.close(fig)
+
+    def test_centrality_aura_with_sized_nodes(self, small_data):
+        net = estimate_network(small_data, method="cor")
+        fig = plot_network(net, node_size="strength", centrality_aura="betweenness")
+        assert fig is not None
+        plt.close(fig)
+
+    def test_centrality_aura_disabled(self, small_data):
+        net = estimate_network(small_data, method="cor")
+        fig = plot_network(net, centrality_aura=None)
+        assert fig is not None
+        plt.close(fig)
+
 
 class TestThemeConstants:
     def test_theme_constants_accessible(self):
@@ -80,6 +98,14 @@ class TestThemeConstants:
         assert NODE_SIZE_DEFAULT > 0
         assert isinstance(ACCENT_COLORS, list)
         assert len(ACCENT_COLORS) >= 5
+
+    def test_aura_and_alpha_constants(self):
+        from psynet.plotting._theme import (
+            AURA_N_SEGMENTS, AURA_ALPHA_START, EDGE_ALPHA_MIN, EDGE_ALPHA_MAX,
+        )
+        assert AURA_N_SEGMENTS > 0
+        assert 0 < AURA_ALPHA_START <= 1.0
+        assert 0 < EDGE_ALPHA_MIN < EDGE_ALPHA_MAX <= 1.0
 
 
 class TestCentralityPlot:

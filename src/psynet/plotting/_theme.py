@@ -8,8 +8,8 @@ colorblind-safe scientific visualization.
 NODE_FILL_COLOR = "#56B4E9"      # sky blue (Okabe-Ito)
 NODE_BORDER_COLOR = "#444444"    # dark gray
 NODE_BORDER_WIDTH = 1.5
-NODE_SIZE_DEFAULT = 600          # fits 1-2 digit numeric labels comfortably
-NODE_SIZE_RANGE = (400, 1200)    # min/max for centrality-scaled sizing
+NODE_SIZE_DEFAULT = 900          # fits 1-2 digit numeric labels comfortably
+NODE_SIZE_RANGE = (700, 1800)    # min/max for centrality-scaled sizing
 
 # ── Edges ──────────────────────────────────────────────────────────
 EDGE_COLOR_POS = "#0072B2"       # blue (Okabe-Ito)
@@ -17,8 +17,17 @@ EDGE_COLOR_NEG = "#D55E00"       # vermillion/orange (Okabe-Ito)
 EDGE_WIDTH_MIN = 0.5
 EDGE_WIDTH_MAX = 4.5
 EDGE_ALPHA = 0.75
+EDGE_ALPHA_MIN = 0.25
+EDGE_ALPHA_MAX = 0.85
 EDGE_STYLE_POS = "solid"
 EDGE_STYLE_NEG = (0, (5, 3))    # dash pattern (offset, (on, off))
+
+# ── Centrality aura ───────────────────────────────────────────────
+AURA_N_SEGMENTS = 40            # arc segments for smooth curve
+AURA_ARC_MAX_ANGLE = 340        # degrees at max centrality
+AURA_ALPHA_START = 0.45         # opacity at arc start
+AURA_WIDTH_FACTOR = 0.30        # arc half-width as fraction of node radius
+AURA_GAP_FACTOR = 1.15          # inner edge distance from center (× node radius)
 
 # ── Fonts ──────────────────────────────────────────────────────────
 FONT_SIZE_NODE = 9
