@@ -35,10 +35,13 @@ pytest tests/ -v           # run all tests
 - **joblib** for bootstrap parallelism
 - **timeseries/ and multilevel/ are separate subpackages** — different return types (`TSNetwork` vs `MultilevelNetwork`), different estimation engines (sklearn LassoCV vs statsmodels mixed-effects), and different dependency requirements (statsmodels is optional)
 
+## Known Divergences from R
+- **Between-subjects network sparsity**: EBIC-glasso applied to random intercept correlations may produce different sparsity patterns than R's mlVAR due to lambda grid and solver differences (sklearn's GraphicalLasso vs R's glasso). Edge weight correlations are high (r > 0.9 with lme4) but structure agreement (which edges are non-zero) can be lower. The `between_gamma` parameter allows tuning sparsity.
+
 ## Dependencies
 numpy, scipy, pandas, scikit-learn, networkx, matplotlib, joblib
 
-Optional: statsmodels (required for multilevel estimation only)
+Optional: statsmodels (required for multilevel estimation only), rpy2 (recommended for mlVAR — enables lme4 backend)
 
 ## GitHub
 https://github.com/nils-rek/psy-network

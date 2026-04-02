@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings as _warnings
+
 import numpy as np
 import pandas as pd
 
@@ -21,7 +23,7 @@ def estimate_multilevel_network(
     day: str | None = None,
     temporal_alpha: float | None = 0.05,
     temporal: str = "correlated",
-    engine: str = "statsmodels",
+    engine: str = "auto",
     auto_re: bool = True,
     gamma: float = 0.5,
     between_gamma: float | None = None,
@@ -62,10 +64,12 @@ def estimate_multilevel_network(
         slopes).  Use ``"orthogonal"`` or ``"fixed"`` when the number
         of variables is large and convergence issues arise.
     engine : str
-        Backend for mixed-effects fitting: ``"statsmodels"`` (default)
-        or ``"lme4"`` (requires rpy2 and R with lme4 + lmerTest
-        installed).  The lme4 engine uses R's optimiser which handles
-        high-dimensional random-effects structures more robustly.
+        Backend for mixed-effects fitting: ``"auto"`` (default),
+        ``"statsmodels"``, or ``"lme4"``.  ``"auto"`` uses lme4 if
+        rpy2 and R are available, otherwise falls back to statsmodels.
+        The lme4 engine is recommended — it uses R's optimiser which
+        maintains random slopes where statsmodels falls back to
+        fixed-only, producing better agreement with R's mlVAR.
     auto_re : bool
         When True and ``engine="statsmodels"``, automatically downgrade
         ``"correlated"`` to ``"orthogonal"`` when the number of variables
@@ -98,10 +102,18 @@ def estimate_multilevel_network(
     -------
     MultilevelNetwork
     """
-    if engine not in ("statsmodels", "lme4"):
+    if engine not in ("auto", "statsmodels", "lme4"):
         raise ValueError(
-            f"engine must be 'statsmodels' or 'lme4', got {engine!r}"
+            f"engine must be 'auto', 'statsmodels', or 'lme4', got {engine!r}"
         )
+
+    if engine == "auto":
+        try:
+            from ._lme4_backend import _check_lme4_available
+            _check_lme4_available()
+            engine = "lme4"
+        except Exception:
+            engine = "statsmodels"
 
     var_cols = validate_multilevel_data(data, subject, beep=beep, day=day)
 

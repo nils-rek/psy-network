@@ -553,34 +553,6 @@ class TestOptimizerChain:
         # All 4 optimizers should have been tried for correlated
         assert call_count["n"] == len(_OPTIMIZER_CHAIN)
 
-    def test_warm_start_params_passed(self, multilevel_data):
-        """OLS warm-start should be computed and passed to _try_fit."""
-        from unittest.mock import patch
-        from psynet.multilevel._temporal import _fit_one_dv
-
-        var_cols = [c for c in multilevel_data.columns
-                    if c not in ("subject", "beep")]
-        from psynet.multilevel._validation import make_multilevel_lag_data
-        lag_data = make_multilevel_lag_data(
-            multilevel_data, var_cols, "subject", beep="beep",
-        )
-
-        received_start_params = []
-
-        def mock_try_fit(model_kwargs, method="lbfgs", start_params=None):
-            received_start_params.append(start_params)
-            import statsmodels.formula.api as smf
-            model = smf.mixedlm(**model_kwargs)
-            result = model.fit(reml=True, method="lbfgs")
-            return result, []  # succeed immediately
-
-        with patch("psynet.multilevel._temporal._try_fit", side_effect=mock_try_fit):
-            _fit_one_dv(0, var_cols, lag_data, "subject",
-                        temporal_re="fixed")
-
-        # At least one call should have received start_params
-        assert any(sp is not None for sp in received_start_params)
-
 
 class TestAutoReStructure:
     def test_downgrades_large_p(self):
@@ -637,11 +609,21 @@ class TestEngineParameter:
                 multilevel_data, "subject", beep="beep", engine="bad",
             )
 
-    def test_default_engine_is_statsmodels(self, multilevel_data):
-        """Default engine should work (statsmodels)."""
+    def test_default_engine_is_auto(self, multilevel_data):
+        """Default engine='auto' should work (resolves to statsmodels or lme4)."""
         result = estimate_multilevel_network(
             multilevel_data, "subject", beep="beep", temporal="fixed",
         )
+        assert isinstance(result, MultilevelNetwork)
+
+    def test_auto_engine_falls_back_to_statsmodels(self, multilevel_data):
+        """engine='auto' should fall back to statsmodels when rpy2 unavailable."""
+        from unittest.mock import patch
+        with patch.dict("sys.modules", {"rpy2": None, "rpy2.robjects": None}):
+            result = estimate_multilevel_network(
+                multilevel_data, "subject", beep="beep",
+                engine="auto", temporal="fixed",
+            )
         assert isinstance(result, MultilevelNetwork)
 
     def test_lme4_without_rpy2_raises(self, multilevel_data):

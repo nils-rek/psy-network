@@ -96,34 +96,6 @@ def _try_fit(
     return result, warn_messages
 
 
-def _get_ols_start_params(model_kwargs: dict) -> np.ndarray | None:
-    """Compute warm-start parameters from OLS fit.
-
-    Returns an array sized for the full MixedLM parameter vector:
-    fixed effects from OLS, RE Cholesky parameters initialised to a
-    small positive diagonal (avoids starting at a singular point).
-    """
-    try:
-        formula = model_kwargs["formula"]
-        data = model_kwargs["data"]
-        ols_result = smf.ols(formula, data=data).fit()
-
-        model = smf.mixedlm(**model_kwargs)
-        n_params = model.k_params
-        n_fe = model.k_fe
-
-        start = np.zeros(n_params)
-        # Fill fixed-effect positions with OLS estimates
-        for i, name in enumerate(model.exog_names):
-            if name in ols_result.params.index:
-                start[i] = ols_result.params[name]
-        # Initialise RE Cholesky parameters to small positive values
-        # to avoid starting on a singular boundary
-        start[n_fe:] = 0.1
-        return start
-    except Exception:
-        return None
-
 
 def _auto_re_structure(p: int, temporal_re: str) -> str:
     """Downgrade correlated RE when p is too large for statsmodels.
@@ -205,15 +177,12 @@ def _fit_one_dv(
         except ValueError:
             raise  # Invalid temporal_re value — don't catch
 
-        # Compute OLS warm-start once per RE structure
-        start_params = _get_ols_start_params(model_kwargs)
-
         # Try all optimizers before falling back to simpler RE
         fit_succeeded = False
         for opt_idx, optimizer in enumerate(_OPTIMIZER_CHAIN):
             try:
                 candidate, candidate_warns = _try_fit(
-                    model_kwargs, method=optimizer, start_params=start_params,
+                    model_kwargs, method=optimizer,
                 )
                 if not _has_severe_warnings(candidate_warns):
                     result = candidate
@@ -341,16 +310,21 @@ def _fit_one_dv(
     }
 
 
-def _emit_convergence_summary(fit_info: dict, requested_re: str) -> None:
+def _emit_convergence_summary(
+    fit_info: dict, requested_re: str, engine: str = "statsmodels",
+) -> None:
     """Emit a UserWarning summarising convergence issues across DVs."""
     warn_dvs = []
     fallback_dvs = []
+    fell_to_fixed = False
     for var, info in fit_info.items():
         if info.get("warnings"):
             warn_dvs.append(var)
         actual = info.get("actual_re", requested_re)
         if actual != requested_re:
             fallback_dvs.append(f"{var} ({requested_re} -> {actual})")
+            if actual == "fixed":
+                fell_to_fixed = True
 
     parts = []
     if fallback_dvs:
@@ -363,6 +337,11 @@ def _emit_convergence_summary(fit_info: dict, requested_re: str) -> None:
             "Convergence warnings for: "
             + ", ".join(warn_dvs)
             + ". Inspect result.fit_info[var]['warnings'] for details."
+        )
+    if fell_to_fixed and engine != "lme4":
+        parts.append(
+            "Consider using engine='lme4' (requires rpy2 + R) for "
+            "better random-effects convergence."
         )
     if parts:
         _warnings.warn(
@@ -416,7 +395,7 @@ def estimate_multilevel_temporal(
 
     # Auto-downgrade RE for large p
     effective_re = temporal_re
-    if auto_re:
+    if auto_re and engine != "lme4":
         effective_re = _auto_re_structure(p, temporal_re)
 
     if engine == "lme4":
@@ -472,7 +451,7 @@ def estimate_multilevel_temporal(
         residual_series[var_cols[j]] = res["residuals"]
 
     # Surface convergence summary to the user
-    _emit_convergence_summary(fit_info, effective_re)
+    _emit_convergence_summary(fit_info, effective_re, engine=engine)
 
     # Build residuals DataFrame — each DV model may have used a different
     # subset of rows (per-model listwise deletion), so NaN fills gaps
