@@ -24,8 +24,8 @@ def plot_community(
     layout: str = "spring",
     palette: list[str] | None = None,
     node_size: float = T.NODE_SIZE_DEFAULT,
-    edge_color_pos: str = T.EDGE_COLOR_POS,
-    edge_color_neg: str = T.EDGE_COLOR_NEG,
+    edge_color_pos: str | None = None,
+    edge_color_neg: str | None = None,
     max_edge_width: float = T.EDGE_WIDTH_MAX,
     min_edge_width: float = T.EDGE_WIDTH_MIN,
     font_size: int = T.FONT_SIZE_NODE,
@@ -74,6 +74,11 @@ def plot_community(
     -------
     Figure
     """
+    if edge_color_pos is None:
+        edge_color_pos = T.EDGE_COLOR_POS
+    if edge_color_neg is None:
+        edge_color_neg = T.EDGE_COLOR_NEG
+
     G = net.to_networkx()
 
     # Layout
@@ -105,6 +110,8 @@ def plot_community(
         net_ax = ax
         legend_ax = None
 
+    T.apply_theme_to_axes(net_ax)
+
     # Community colors
     colors = palette if palette is not None else T.COMMUNITY_PALETTE
     node_colors = [colors[communities[node] % len(colors)] for node in net.labels]
@@ -123,6 +130,7 @@ def plot_community(
     nx.draw_networkx_labels(
         G, pos, labels=label_map, ax=net_ax,
         font_size=font_size, font_weight=T.FONT_WEIGHT_NODE,
+        font_color=T.TEXT_PRIMARY,
     )
 
     # Draw edges
@@ -142,7 +150,7 @@ def plot_community(
             )
 
     net_ax.set_title(title or f"Communities ({net.method})",
-                     fontsize=T.TITLE_FONT_SIZE)
+                     fontsize=T.TITLE_FONT_SIZE, color=T.TEXT_PRIMARY)
     net_ax.axis("off")
 
     # Legend panel with community-colored markers
@@ -170,7 +178,7 @@ def plot_community(
             )
             legend_handles.append(patch)
         net_ax.legend(handles=legend_handles, loc="upper left",
-                      fontsize=T.FONT_SIZE_LEGEND)
+                      fontsize=T.FONT_SIZE_LEGEND, labelcolor=T.TEXT_PRIMARY)
 
     fig.tight_layout()
     return fig

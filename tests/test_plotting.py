@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import pytest
 
 from psynet import estimate_network
-from psynet.plotting import plot_network, plot_centrality
+from psynet.plotting import plot_network, plot_centrality, set_theme, get_theme
 from psynet.bootstrap import bootnet
 
 
@@ -149,3 +149,51 @@ class TestBootstrapPlots:
         fig = result.plot_difference()
         assert fig is not None
         plt.close(fig)
+
+
+class TestDarkTheme:
+    def setup_method(self):
+        set_theme("light")
+
+    def teardown_method(self):
+        set_theme("light")
+
+    def test_set_theme_changes_constants(self):
+        from psynet.plotting import _theme
+        set_theme("dark")
+        assert get_theme() == "dark"
+        assert _theme.BACKGROUND_COLOR == "#0e0f14"
+        assert _theme.EDGE_COLOR_NEG == "#c96b62"
+        assert _theme.EDGE_COLOR_POS == "#6b9fd4"
+
+    def test_network_plot_uses_dark_background(self, small_data):
+        set_theme("dark")
+        net = estimate_network(small_data, method="cor")
+        fig = net.plot()
+        fc = fig.get_facecolor()
+        # #0e0f14 is very dark — all channels below 0.1
+        assert fc[0] < 0.1 and fc[1] < 0.1 and fc[2] < 0.1
+        plt.close(fig)
+
+    def test_community_plot_uses_dark_palette(self):
+        from psynet.plotting import _theme
+        set_theme("dark")
+        assert _theme.COMMUNITY_PALETTE[0] == "#5bb98b"
+        assert _theme.COMMUNITY_PALETTE[1] == "#d4915e"
+        assert _theme.COMMUNITY_PALETTE[2] == "#6b9fd4"
+
+    def test_theme_round_trip(self):
+        from psynet.plotting import _theme
+        light_bg = _theme.BACKGROUND_COLOR
+        set_theme("dark")
+        assert _theme.BACKGROUND_COLOR != light_bg
+        set_theme("light")
+        assert _theme.BACKGROUND_COLOR == light_bg
+
+    def test_light_theme_is_default(self):
+        assert get_theme() == "light"
+
+    def test_invalid_theme_raises(self):
+        import pytest
+        with pytest.raises(ValueError, match="Unknown theme"):
+            set_theme("purple")

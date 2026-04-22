@@ -92,7 +92,7 @@ def plot_group_networks(
                          show_legend=False, **kwargs)
 
         ax.set_title(f"{label} (n={net.n_observations})",
-                     fontsize=T.PANEL_TITLE_FONT_SIZE)
+                     fontsize=T.PANEL_TITLE_FONT_SIZE, color=T.TEXT_PRIMARY)
 
     if show_legend:
         first_net = group_net[group_net.group_labels[0]]
@@ -106,7 +106,7 @@ def plot_group_networks(
     fig.suptitle(
         f"Group Networks (JGL-{group_net.penalty}, "
         f"\u03bb\u2081={group_net.lambda1:.4f}, \u03bb\u2082={group_net.lambda2:.4f})",
-        fontsize=T.SUPTITLE_FONT_SIZE,
+        fontsize=T.SUPTITLE_FONT_SIZE, color=T.TEXT_PRIMARY,
     )
     fig.tight_layout()
     return fig
@@ -153,6 +153,7 @@ def plot_group_edge_accuracy(
 
     for g_idx, group in enumerate(groups):
         ax = axes[g_idx]
+        T.apply_theme_to_axes(ax)
         gsummary = summary[summary["group"] == group].copy()
         gsummary["edge_label"] = gsummary["node1"] + " -- " + gsummary["node2"]
 
@@ -164,7 +165,7 @@ def plot_group_edge_accuracy(
 
         ax.hlines(
             y_pos, gsummary["ci_lower"].values, gsummary["ci_upper"].values,
-            color="#CCCCCC", linewidth=2,
+            color=T.CI_BAR_COLOR, linewidth=2,
         )
         ax.scatter(gsummary["mean"].values, y_pos,
                    color=T.ACCENT_COLORS[0], s=15, zorder=3)
@@ -176,11 +177,12 @@ def plot_group_edge_accuracy(
 
         ax.set_yticks(y_pos)
         ax.set_yticklabels(gsummary["edge_label"].values, fontsize=6)
-        ax.axvline(0, color="black", linewidth=0.5, linestyle="--")
-        ax.set_xlabel("Edge weight")
-        ax.set_title(f"{group}")
+        ax.axvline(0, color=T.ZERO_LINE_COLOR, linewidth=0.5, linestyle="--")
+        ax.set_xlabel("Edge weight", color=T.TEXT_PRIMARY)
+        ax.set_title(f"{group}", color=T.TEXT_PRIMARY)
 
-    fig.suptitle("Group Edge Accuracy (Bootstrap CIs)", fontsize=T.TITLE_FONT_SIZE)
+    fig.suptitle("Group Edge Accuracy (Bootstrap CIs)", fontsize=T.TITLE_FONT_SIZE,
+                 color=T.TEXT_PRIMARY)
     fig.tight_layout()
     return fig
 
@@ -218,6 +220,7 @@ def plot_group_centrality_comparison(
         figsize = (8, max(4, n_nodes * 0.4))
 
     fig, ax = plt.subplots(figsize=figsize)
+    T.apply_theme_to_axes(ax)
     bar_height = 0.8 / len(groups)
 
     for g_idx, group in enumerate(groups):
@@ -232,8 +235,8 @@ def plot_group_centrality_comparison(
 
     ax.set_yticks(np.arange(n_nodes))
     ax.set_yticklabels(nodes, fontsize=8)
-    ax.set_xlabel(statistic.capitalize())
-    ax.set_title(f"Centrality Comparison: {statistic}")
-    ax.legend(fontsize=8)
+    ax.set_xlabel(statistic.capitalize(), color=T.TEXT_PRIMARY)
+    ax.set_title(f"Centrality Comparison: {statistic}", color=T.TEXT_PRIMARY)
+    ax.legend(fontsize=8, labelcolor=T.TEXT_PRIMARY, frameon=False)
     fig.tight_layout()
     return fig

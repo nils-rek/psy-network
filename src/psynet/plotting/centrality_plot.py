@@ -54,19 +54,22 @@ def plot_centrality(
         axes = [axes]
 
     for ax, measure in zip(axes, measures):
+        T.apply_theme_to_axes(ax)
         values = cent[measure].sort_values()
         ax.hlines(
             y=range(len(values)), xmin=0, xmax=values.values,
-            color="#666666", linewidth=0.8,
+            color=T.LOLLIPOP_STEM_COLOR, linewidth=0.8,
         )
         ax.scatter(values.values, range(len(values)),
                    color=T.ACCENT_COLORS[0], s=40, zorder=3)
         ax.set_yticks(range(len(values)))
         ax.set_yticklabels(values.index, fontsize=8)
-        ax.axvline(0, color="black", linewidth=0.5, linestyle="--")
-        ax.set_title(measure, fontsize=10)
-        ax.set_xlabel("z-score" if standardized else "value", fontsize=8)
+        ax.axvline(0, color=T.ZERO_LINE_COLOR, linewidth=0.5, linestyle="--")
+        ax.set_title(measure, fontsize=10, color=T.TEXT_PRIMARY)
+        ax.set_xlabel("z-score" if standardized else "value", fontsize=8,
+                      color=T.TEXT_PRIMARY)
 
-    fig.suptitle("Centrality Indices", fontsize=T.TITLE_FONT_SIZE, y=1.02)
+    fig.suptitle("Centrality Indices", fontsize=T.TITLE_FONT_SIZE, y=1.02,
+                 color=T.TEXT_PRIMARY)
     fig.tight_layout()
     return fig

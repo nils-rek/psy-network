@@ -11,6 +11,7 @@ from .group_plot import (
 from .ts_plot import plot_ts_networks
 from .community_plot import plot_community
 from .multilevel_plot import plot_multilevel_networks
+from ._theme import set_theme, get_theme
 
 __all__ = [
     "plot_network",
@@ -24,4 +25,6 @@ __all__ = [
     "plot_ts_networks",
     "plot_community",
     "plot_multilevel_networks",
+    "set_theme",
+    "get_theme",
 ]

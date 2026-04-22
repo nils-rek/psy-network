@@ -88,10 +88,10 @@ def plot_network(
     *,
     layout: str = "spring",
     node_size: float | str = T.NODE_SIZE_DEFAULT,
-    node_color: str = T.NODE_FILL_COLOR,
+    node_color: str | None = None,
     centrality_aura: str | None = "strength",
-    edge_color_pos: str = T.EDGE_COLOR_POS,
-    edge_color_neg: str = T.EDGE_COLOR_NEG,
+    edge_color_pos: str | None = None,
+    edge_color_neg: str | None = None,
     max_edge_width: float = T.EDGE_WIDTH_MAX,
     min_edge_width: float = T.EDGE_WIDTH_MIN,
     font_size: int = T.FONT_SIZE_NODE,
@@ -141,6 +141,13 @@ def plot_network(
     -------
     Figure
     """
+    if node_color is None:
+        node_color = T.NODE_FILL_COLOR
+    if edge_color_pos is None:
+        edge_color_pos = T.EDGE_COLOR_POS
+    if edge_color_neg is None:
+        edge_color_neg = T.EDGE_COLOR_NEG
+
     G = net.to_networkx()
 
     # Layout
@@ -171,6 +178,8 @@ def plot_network(
         fig = ax.get_figure()
         net_ax = ax
         legend_ax = None
+
+    T.apply_theme_to_axes(net_ax)
 
     # Node sizes
     if isinstance(node_size, str):
@@ -210,6 +219,7 @@ def plot_network(
     nx.draw_networkx_labels(
         G, pos, labels=label_map, ax=net_ax,
         font_size=font_size, font_weight=T.FONT_WEIGHT_NODE,
+        font_color=T.TEXT_PRIMARY,
     )
 
     # Draw edges
@@ -230,7 +240,7 @@ def plot_network(
             )
 
     net_ax.set_title(title or f"Network ({net.method})",
-                     fontsize=T.TITLE_FONT_SIZE)
+                     fontsize=T.TITLE_FONT_SIZE, color=T.TEXT_PRIMARY)
     net_ax.axis("off")
 
     # Legend panel
@@ -250,7 +260,8 @@ def plot_network(
                    linestyle="dashed", label="Negative"),
         ]
         net_ax.legend(handles=legend_handles, loc="upper left",
-                      fontsize=T.FONT_SIZE_LEGEND, frameon=False)
+                      fontsize=T.FONT_SIZE_LEGEND, frameon=False,
+                      labelcolor=T.TEXT_PRIMARY)
 
     fig.tight_layout()
     return fig

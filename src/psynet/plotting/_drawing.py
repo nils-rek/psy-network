@@ -57,22 +57,26 @@ def _draw_one_entry(ax, y, index, label, color=None):
             0.17, y, num_text,
             fontsize=T.FONT_SIZE_LEGEND, fontweight="bold",
             va="center", ha="right", transform=ax.transAxes,
+            color=T.TEXT_PRIMARY,
         )
         ax.text(
             0.20, y, label,
             fontsize=T.FONT_SIZE_LEGEND,
             va="center", ha="left", transform=ax.transAxes,
+            color=T.TEXT_PRIMARY,
         )
     else:
         ax.text(
             0.10, y, num_text,
             fontsize=T.FONT_SIZE_LEGEND, fontweight="bold",
             va="center", ha="right", transform=ax.transAxes,
+            color=T.TEXT_PRIMARY,
         )
         ax.text(
             0.15, y, label,
             fontsize=T.FONT_SIZE_LEGEND,
             va="center", ha="left", transform=ax.transAxes,
+            color=T.TEXT_PRIMARY,
         )
 
 
@@ -80,8 +84,8 @@ def _draw_legend_panel(
     ax,
     labels: list[str],
     *,
-    edge_color_pos: str = T.EDGE_COLOR_POS,
-    edge_color_neg: str = T.EDGE_COLOR_NEG,
+    edge_color_pos: str | None = None,
+    edge_color_neg: str | None = None,
     community_colors: list | None = None,
     communities=None,
     legend_title: str | None = T.LEGEND_TITLE_DEFAULT,
@@ -106,6 +110,12 @@ def _draw_legend_panel(
         Header text drawn at the top of the legend panel.
         Pass ``None`` to suppress.
     """
+    if edge_color_pos is None:
+        edge_color_pos = T.EDGE_COLOR_POS
+    if edge_color_neg is None:
+        edge_color_neg = T.EDGE_COLOR_NEG
+
+    T.apply_theme_to_axes(ax)
     ax.axis("off")
 
     # --- compute how many visual lines we need ---
@@ -129,6 +139,7 @@ def _draw_legend_panel(
             0.05, y, legend_title,
             fontsize=T.LEGEND_HEADER_FONT_SIZE, fontweight="bold",
             va="center", ha="left", transform=ax.transAxes,
+            color=T.TEXT_PRIMARY,
         )
         y -= step * 1.5
 
@@ -142,7 +153,7 @@ def _draw_legend_panel(
                 0.05, y, f"Community {comm_id}",
                 fontsize=T.LEGEND_SUBHEADING_FONT_SIZE, fontweight="bold",
                 fontstyle="italic", va="center", ha="left",
-                transform=ax.transAxes,
+                transform=ax.transAxes, color=T.TEXT_SECONDARY,
             )
             y -= step
             # entries in this community, preserving original label order
@@ -168,7 +179,7 @@ def _draw_legend_panel(
     ax.legend(
         handles=legend_handles, loc="lower left",
         fontsize=T.FONT_SIZE_LEGEND, frameon=False,
-        bbox_to_anchor=(0.0, 0.0),
+        bbox_to_anchor=(0.0, 0.0), labelcolor=T.TEXT_SECONDARY,
     )
 
 
@@ -244,7 +255,7 @@ def _plot_network_panels(
         _draw_network_on_ax(net, ax, pos, directed=directed,
                             show_legend=show_legend, **kwargs)
         ax.set_title(f"{title} (n={net.n_observations})",
-                     fontsize=T.PANEL_TITLE_FONT_SIZE)
+                     fontsize=T.PANEL_TITLE_FONT_SIZE, color=T.TEXT_PRIMARY)
 
     if show_legend:
         labels = panels[0][1].labels
@@ -256,7 +267,7 @@ def _plot_network_panels(
         )
 
     if suptitle:
-        fig.suptitle(suptitle, fontsize=T.SUPTITLE_FONT_SIZE)
+        fig.suptitle(suptitle, fontsize=T.SUPTITLE_FONT_SIZE, color=T.TEXT_PRIMARY)
     fig.tight_layout()
     return fig
 
@@ -264,6 +275,7 @@ def _plot_network_panels(
 def _draw_network_on_ax(net, ax, pos, *, directed=False, show_legend=True,
                          **kwargs):
     """Draw a network on given axes with pre-computed positions."""
+    T.apply_theme_to_axes(ax)
     node_color = kwargs.get("node_color", T.NODE_FILL_COLOR)
     edge_color_pos = kwargs.get("edge_color_pos", T.EDGE_COLOR_POS)
     edge_color_neg = kwargs.get("edge_color_neg", T.EDGE_COLOR_NEG)
@@ -287,6 +299,7 @@ def _draw_network_on_ax(net, ax, pos, *, directed=False, show_legend=True,
     nx.draw_networkx_labels(
         G, pos, labels=label_map, ax=ax,
         font_size=font_size, font_weight=T.FONT_WEIGHT_NODE,
+        font_color=T.TEXT_PRIMARY,
     )
 
     edges = list(G.edges(data=True))
