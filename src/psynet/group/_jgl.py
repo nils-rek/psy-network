@@ -6,6 +6,8 @@ inverse covariance estimation across multiple classes", JRSS-B.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 
 
@@ -80,38 +82,38 @@ def _z_update_fused_penalty(
     rho: float,
     penalize_diagonal: bool,
 ) -> list[np.ndarray]:
-    """Z-update with fused lasso penalty across groups (vectorized)."""
+    """Z-update with fused lasso penalty across groups (vectorized).
+
+    The prox of ``lambda1 * ||.||_1 + lambda2 * sum_{k<l} |z_k - z_l|``
+    decomposes as L1 soft-thresholding applied to the output of the fused
+    prox (Friedman et al., 2007), so fusion is applied first.
+    """
     K = len(thetas)
     p = thetas[0].shape[0]
 
     # Stack into (K, p, p)
     V = np.array([thetas[k] + Us[k] for k in range(K)])
 
-    # Soft-threshold for sparsity
-    V = _soft_threshold(V, lambda1 / rho)
-
-    # Fused penalty: shrink differences across groups
+    # Fused penalty first: shrink differences across groups
     if K == 2:
-        # Closed-form for K=2: vectorized over all (i,j)
+        # Closed-form for K=2: z0 - z1 = soft(v0 - v1, 2*lambda2/rho),
+        # i.e. the half-difference is soft-thresholded at lambda2/rho.
         mean_v = (V[0] + V[1]) / 2              # (p, p)
         half_diff = (V[0] - V[1]) / 2           # (p, p)
-        thresh = lambda2 / (2 * rho)
-        fuse_mask = np.abs(half_diff) <= thresh  # (p, p)
-        # Where fused: both become mean
-        V[0] = np.where(fuse_mask, mean_v, V[0])
-        V[1] = np.where(fuse_mask, mean_v, V[1])
-        # Where not fused: shrink toward each other
-        shrink = np.sign(half_diff) * thresh
-        V[0] = np.where(~fuse_mask, mean_v + (half_diff - shrink), V[0])
-        V[1] = np.where(~fuse_mask, mean_v - (half_diff - shrink), V[1])
+        shrunk = _soft_threshold(half_diff, lambda2 / rho)
+        V[0] = mean_v + shrunk
+        V[1] = mean_v - shrunk
     else:
-        # General case K>2: apply pairwise fused proximal per element
+        # General case K>2: exact all-pairs fused prox per element
         # Vectorize over (i,j) by reshaping to (K, p*p)
         V_flat = V.reshape(K, -1)  # (K, p*p)
         lam_scaled = lambda2 / rho
         for col in range(V_flat.shape[1]):
             V_flat[:, col] = _fused_proximal(V_flat[:, col], lam_scaled)
         V = V_flat.reshape(K, p, p)
+
+    # Then soft-threshold for sparsity
+    V = _soft_threshold(V, lambda1 / rho)
 
     # Restore diagonal (no penalty)
     if not penalize_diagonal:
@@ -121,27 +123,32 @@ def _z_update_fused_penalty(
     return [V[k] for k in range(K)]
 
 
-def _fused_proximal(v: np.ndarray, lam: float, max_iter: int = 50) -> np.ndarray:
-    """Proximal operator for the fused penalty sum_{k<l} |z_k - z_l|.
+def _fused_proximal(v: np.ndarray, lam: float) -> np.ndarray:
+    """Exact proximal operator for the all-pairs fused penalty.
 
-    Uses an iterative approach: for each adjacent pair, apply pairwise fusion.
+    Solves ``min_z 0.5 * ||z - v||^2 + lam * sum_{k<l} |z_k - z_l|``.
+
+    The solution preserves the ordering of ``v``; subject to that ordering
+    the objective is separable with linear tilts, so the minimizer is the
+    isotonic regression (PAVA) of ``v_(k) - lam * (2k - K + 1)`` over the
+    sorted values.
     """
-    z = v.copy()
-    K = len(z)
-    for _ in range(max_iter):
-        z_old = z.copy()
-        for k in range(K - 1):
-            diff = z[k] - z[k + 1]
-            if abs(diff) <= 2 * lam:
-                mean_val = (z[k] + z[k + 1]) / 2
-                z[k] = mean_val
-                z[k + 1] = mean_val
-            else:
-                shrink = np.sign(diff) * lam
-                z[k] -= shrink
-                z[k + 1] += shrink
-        if np.max(np.abs(z - z_old)) < 1e-8:
-            break
+    K = len(v)
+    order = np.argsort(v, kind="stable")
+    w = v[order] - lam * (2.0 * np.arange(K) - K + 1)
+
+    # PAVA: non-decreasing isotonic regression with unit weights
+    blocks: list[list[float]] = []  # [mean, count]
+    for x in w:
+        blocks.append([x, 1])
+        while len(blocks) > 1 and blocks[-2][0] >= blocks[-1][0]:
+            m2, c2 = blocks.pop()
+            m1, c1 = blocks.pop()
+            blocks.append([(m1 * c1 + m2 * c2) / (c1 + c2), c1 + c2])
+
+    z_sorted = np.concatenate([np.full(int(c), m) for m, c in blocks])
+    z = np.empty_like(v)
+    z[order] = z_sorted
     return z
 
 
@@ -153,6 +160,7 @@ def joint_graphical_lasso(
     penalty: str = "fused",
     max_iter: int = 500,
     tol: float = 1e-4,
+    tol_abs: float = 1e-6,
     rho: float = 1.0,
     penalize_diagonal: bool = False,
 ) -> list[np.ndarray]:
@@ -174,7 +182,10 @@ def joint_graphical_lasso(
     max_iter : int
         Maximum ADMM iterations.
     tol : float
-        Convergence tolerance on primal residual.
+        Relative convergence tolerance (``eps_rel`` in Boyd et al., 2011,
+        §3.3), applied to both the primal and dual residuals.
+    tol_abs : float
+        Absolute convergence tolerance (``eps_abs``).
     rho : float
         ADMM augmented Lagrangian parameter.
     penalize_diagonal : bool
@@ -198,6 +209,9 @@ def joint_graphical_lasso(
         else _z_update_group_penalty
     )
 
+    sqrt_dim = np.sqrt(K * p * p)
+    converged = False
+
     for iteration in range(max_iter):
         # Theta update (per group)
         Thetas = [
@@ -211,15 +225,34 @@ def joint_graphical_lasso(
         # U update
         Us = [Us[k] + Thetas[k] - Zs_new[k] for k in range(K)]
 
-        # Check convergence (primal residual)
-        primal_res = sum(
-            np.linalg.norm(Thetas[k] - Zs_new[k]) for k in range(K)
-        )
+        # Primal and dual residuals with relative scaling (Boyd et al. §3.3)
+        primal_res = np.sqrt(sum(
+            np.linalg.norm(Thetas[k] - Zs_new[k]) ** 2 for k in range(K)
+        ))
+        dual_res = rho * np.sqrt(sum(
+            np.linalg.norm(Zs_new[k] - Zs[k]) ** 2 for k in range(K)
+        ))
+        theta_norm = np.sqrt(sum(np.linalg.norm(T) ** 2 for T in Thetas))
+        z_norm = np.sqrt(sum(np.linalg.norm(Z) ** 2 for Z in Zs_new))
+        u_norm = np.sqrt(sum(np.linalg.norm(U) ** 2 for U in Us))
+        eps_pri = sqrt_dim * tol_abs + tol * max(theta_norm, z_norm)
+        eps_dual = sqrt_dim * tol_abs + tol * rho * u_norm
 
         Zs = Zs_new
 
-        if primal_res < tol:
+        if primal_res <= eps_pri and dual_res <= eps_dual:
+            converged = True
             break
+
+    if not converged:
+        warnings.warn(
+            f"Joint graphical lasso ADMM did not converge within "
+            f"{max_iter} iterations (primal residual {primal_res:.2e}, "
+            f"dual residual {dual_res:.2e}). Results may be inaccurate; "
+            f"consider increasing max_iter.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     # Return the Z variables (consensus) as final precision estimates
     return Zs

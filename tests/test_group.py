@@ -98,6 +98,101 @@ class TestJGL:
             eigvals = np.linalg.eigvalsh(P)
             assert eigvals.min() > -1e-8
 
+    def test_high_lambda2_fuses(self):
+        """A fused penalty large relative to n_k * |S_0 - S_1| should make
+        the off-diagonal group estimates coincide."""
+        S = _make_simple_covariances()
+        result = joint_graphical_lasso(S, [50, 50], 0.05, 50.0, "fused")
+        off0 = result[0].copy()
+        off1 = result[1].copy()
+        np.fill_diagonal(off0, 0.0)
+        np.fill_diagonal(off1, 0.0)
+        np.testing.assert_allclose(off0, off1, atol=1e-3)
+
+    def test_lambda2_shrinks_group_differences(self):
+        """Increasing lambda2 must reduce the distance between groups."""
+        S = _make_simple_covariances()
+        res_low = joint_graphical_lasso(S, [50, 50], 0.05, 0.1, "fused")
+        res_high = joint_graphical_lasso(S, [50, 50], 0.05, 10.0, "fused")
+        d_low = np.linalg.norm(res_low[0] - res_low[1])
+        d_high = np.linalg.norm(res_high[0] - res_high[1])
+        assert d_high < d_low
+
+    def test_nonconvergence_warns(self):
+        """Hitting max_iter without converging should raise a warning."""
+        S = _make_simple_covariances()
+        with pytest.warns(UserWarning, match="did not converge"):
+            joint_graphical_lasso(S, [50, 50], 0.1, 0.1, "fused", max_iter=2)
+
+
+# ------------------------------------------------------------------ #
+# TestFusedProx — proximal operator correctness
+# ------------------------------------------------------------------ #
+
+class TestFusedProx:
+    """Verify the fused Z-update against brute-force optimization."""
+
+    @staticmethod
+    def _brute_force_prox(v, lam1, lam2, rho=1.0):
+        """Numerically minimize the per-element Z-update objective."""
+        from scipy.optimize import minimize
+
+        def objective(z):
+            quad = 0.5 * rho * np.sum((z - v) ** 2)
+            l1 = lam1 * np.sum(np.abs(z))
+            fused = lam2 * sum(
+                abs(z[k] - z[l])
+                for k in range(len(z)) for l in range(k + 1, len(z))
+            )
+            return quad + l1 + fused
+
+        best = None
+        for start in [v, np.zeros_like(v), np.full_like(v, v.mean())]:
+            res = minimize(objective, start, method="Nelder-Mead",
+                           options={"xatol": 1e-9, "fatol": 1e-12,
+                                    "maxiter": 20000})
+            if best is None or res.fun < best.fun:
+                best = res
+        return best.x
+
+    def _z_update_single(self, v, lam1, lam2, rho=1.0):
+        """Run _z_update_fused_penalty on a K-vector via 1x1 matrices."""
+        from psynet.group._jgl import _z_update_fused_penalty
+        thetas = [np.array([[x]]) for x in v]
+        us = [np.zeros((1, 1)) for _ in v]
+        out = _z_update_fused_penalty(thetas, us, lam1, lam2, rho,
+                                      penalize_diagonal=True)
+        return np.array([z[0, 0] for z in out])
+
+    @pytest.mark.parametrize("seed", [0, 1, 2])
+    @pytest.mark.parametrize("k", [2, 3])
+    def test_prox_matches_brute_force(self, seed, k):
+        rng = np.random.default_rng(seed)
+        v = rng.normal(scale=1.5, size=k)
+        for lam1, lam2 in [(0.0, 0.3), (0.2, 0.3), (0.4, 0.1)]:
+            z = self._z_update_single(v, lam1, lam2)
+            z_ref = self._brute_force_prox(v, lam1, lam2)
+            np.testing.assert_allclose(z, z_ref, atol=1e-4)
+
+    def test_k2_matches_general_path(self):
+        """K=2 closed form must agree with the general all-pairs prox."""
+        from psynet.group._jgl import _fused_proximal
+        rng = np.random.default_rng(5)
+        for _ in range(20):
+            v = rng.normal(size=2)
+            lam = float(rng.uniform(0.01, 1.0))
+            # K=2 branch with lambda1=0 isolates the fusion step
+            z_closed = self._z_update_single(v, 0.0, lam)
+            z_general = _fused_proximal(v.copy(), lam)
+            np.testing.assert_allclose(z_closed, z_general, atol=1e-10)
+
+    def test_full_fusion_at_large_lambda(self):
+        """Large lam collapses all groups to the mean."""
+        from psynet.group._jgl import _fused_proximal
+        v = np.array([1.0, -0.5, 0.3])
+        z = _fused_proximal(v, 10.0)
+        np.testing.assert_allclose(z, np.full(3, v.mean()), atol=1e-10)
+
 
 # ------------------------------------------------------------------ #
 # TestLambdaSelection
@@ -132,6 +227,17 @@ class TestLambdaSelection:
         S = np.eye(p)
         score = _group_ebic([P], [S], [100], 0.5, "ebic")
         assert np.isfinite(score)
+
+    def test_group_ebic_ignores_numerically_tiny_edges(self):
+        """Edges below the threshold must not count toward the penalty."""
+        p = 5
+        P_sparse = np.eye(p) * 1.5
+        P_tiny = P_sparse.copy()
+        P_tiny[0, 1] = P_tiny[1, 0] = 1e-8  # solver residue, not an edge
+        S = np.eye(p)
+        score_sparse = _group_ebic([P_sparse], [S], [100], 0.5, "ebic")
+        score_tiny = _group_ebic([P_tiny], [S], [100], 0.5, "ebic")
+        np.testing.assert_allclose(score_tiny, score_sparse, rtol=1e-10)
 
     def test_bic_criterion(self):
         """BIC criterion should work."""
