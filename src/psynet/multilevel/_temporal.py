@@ -288,17 +288,31 @@ def _fit_one_dv(
                 subject_coefs[subj_id] = fixed.copy()
                 subject_intercepts[subj_id] = fixed_intercept
 
-    # Residuals — fall back to fixed-effect-only residuals when
-    # statsmodels cannot predict random effects (singular covariance)
+    # Residuals — result.resid is conditional on the BLUPs. When
+    # statsmodels cannot compute it (singular covariance), reconstruct
+    # per-subject conditional residuals from the subject coefficients so
+    # the pooled contemporaneous correlation does not mix conditional
+    # and marginal residuals across DVs.
     try:
         residuals = result.resid
     except (np.linalg.LinAlgError, ValueError):
+        _warnings.warn(
+            f"mlVAR DV={dv!r}: could not compute model residuals "
+            f"(singular covariance); using residuals reconstructed from "
+            f"subject-level coefficients, which are approximate.",
+            UserWarning,
+            stacklevel=2,
+        )
         y = model_data[dv].values
         X_mat = model_data[lag_cols].values
-        residuals = pd.Series(
-            y - fixed_intercept - X_mat @ fixed,
-            index=model_data.index,
-        )
+        subj_vals = model_data[subject].values
+        preds = np.empty(len(y))
+        for s in pd.unique(subj_vals):
+            mask = subj_vals == s
+            coef_s = subject_coefs.get(s, fixed)
+            icept_s = subject_intercepts.get(s, fixed_intercept)
+            preds[mask] = icept_s + X_mat[mask] @ coef_s
+        residuals = pd.Series(y - preds, index=model_data.index)
 
     return {
         "j": j,
@@ -315,22 +329,37 @@ def _fit_one_dv(
 
 
 def _emit_convergence_summary(
-    fit_info: dict, requested_re: str, engine: str = "statsmodels",
+    fit_info: dict,
+    requested_re: str,
+    effective_re: str | None = None,
+    engine: str = "statsmodels",
 ) -> None:
-    """Emit a UserWarning summarising convergence issues across DVs."""
+    """Emit a UserWarning summarising convergence issues across DVs.
+
+    ``requested_re`` is what the user asked for; ``effective_re`` is the
+    structure actually attempted (after any ``auto_re`` downgrade), which
+    per-DV fallbacks are measured against.
+    """
+    if effective_re is None:
+        effective_re = requested_re
     warn_dvs = []
     fallback_dvs = []
     fell_to_fixed = False
     for var, info in fit_info.items():
         if info.get("warnings"):
             warn_dvs.append(var)
-        actual = info.get("actual_re", requested_re)
-        if actual != requested_re:
-            fallback_dvs.append(f"{var} ({requested_re} -> {actual})")
+        actual = info.get("actual_re", effective_re)
+        if actual != effective_re:
+            fallback_dvs.append(f"{var} ({effective_re} -> {actual})")
             if actual == "fixed":
                 fell_to_fixed = True
 
     parts = []
+    if effective_re != requested_re:
+        parts.append(
+            f"auto_re downgraded the requested temporal="
+            f"{requested_re!r} to {effective_re!r} for all DVs"
+        )
     if fallback_dvs:
         parts.append(
             "RE structure fallback occurred for: "
@@ -437,7 +466,7 @@ def estimate_multilevel_temporal(
             "bic": res["bic"],
             "aic": res["aic"],
             "warnings": res.get("warnings", []),
-            "actual_re": res.get("actual_re", temporal_re),
+            "actual_re": res.get("actual_re", effective_re),
         }
 
         for s, coef_row in res["subject_coefs"].items():
@@ -455,7 +484,7 @@ def estimate_multilevel_temporal(
         residual_series[var_cols[j]] = res["residuals"]
 
     # Surface convergence summary to the user
-    _emit_convergence_summary(fit_info, effective_re, engine=engine)
+    _emit_convergence_summary(fit_info, temporal_re, effective_re, engine=engine)
 
     # Build residuals DataFrame — each DV model may have used a different
     # subset of rows (per-model listwise deletion), so NaN fills gaps

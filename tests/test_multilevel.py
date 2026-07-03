@@ -740,3 +740,28 @@ class TestTemporalOrientation:
         edges = result.temporal.edges_df
         fwd = edges[(edges["node1"] == "V1") & (edges["node2"] == "V2")]
         assert len(fwd) == 1 and fwd["weight"].iloc[0] > 0.3
+
+
+# ---------------------------------------------------------------------------
+# Subjects without valid lag pairs
+# ---------------------------------------------------------------------------
+
+class TestSubjectWithoutLagPairs:
+    def test_dropped_subject_warns_instead_of_keyerror(self, multilevel_data):
+        """A subject with observations but no valid consecutive lag pairs
+        must be excluded with a warning, not crash with a KeyError."""
+        bad = pd.DataFrame({
+            "subject": ["S_bad"] * 4,
+            "beep": [1, 3, 5, 7],  # never consecutive
+            "V1": [0.1, 0.4, -0.2, 0.3],
+            "V2": [0.2, -0.1, 0.5, 0.0],
+            "V3": [0.0, 0.2, 0.1, -0.3],
+            "V4": [0.3, 0.1, -0.1, 0.2],
+        })
+        data = pd.concat([multilevel_data, bad], ignore_index=True)
+        with pytest.warns(UserWarning, match="no valid consecutive lag pairs"):
+            result = estimate_multilevel_network(data, "subject", beep="beep")
+        assert "S_bad" not in result.subject_ids
+        assert "S_bad" not in result.subject_temporal
+        # Remaining subjects unaffected
+        assert result.n_subjects == multilevel_data["subject"].nunique()

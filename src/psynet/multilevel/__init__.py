@@ -169,8 +169,19 @@ def estimate_multilevel_network(
         directed=True,
     )
 
-    # Per-subject temporal networks
-    subject_ids = sorted(data[subject].unique())
+    # Per-subject temporal networks. Subjects with no valid consecutive
+    # lag pairs are absent from lag_data (and from the fitted models),
+    # so derive the ID list from lag_data and surface any drops.
+    subject_ids = sorted(lag_data[subject].unique())
+    dropped_subjects = sorted(set(data[subject].unique()) - set(subject_ids))
+    if dropped_subjects:
+        _warnings.warn(
+            f"Subjects {dropped_subjects} contributed no valid "
+            f"consecutive lag pairs (e.g. non-consecutive beeps or "
+            f"missing data) and were excluded from estimation.",
+            UserWarning,
+            stacklevel=2,
+        )
     subject_temporal = {}
     for s in subject_ids:
         s_coef = temporal_result.subject_coefs[s].T.copy()
