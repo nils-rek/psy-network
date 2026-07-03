@@ -284,3 +284,36 @@ class TestTSPlotting:
         fig = plot_ts_networks(ts, layout="circular")
         assert isinstance(fig, Figure)
         plt.close(fig)
+
+
+# ── Scaling and residuals ───────────────────────────────────────────
+
+
+class TestScaleAndResiduals:
+    def test_scale_smoke(self, var_data):
+        ts = estimate_var_network(var_data, cv=3, n_lambda=20, scale=True)
+        assert ts.temporal.adjacency.shape == (4, 4)
+
+    def test_scale_invariant_to_units(self, var_data):
+        """With scale=True, multiplying a variable by a constant must not
+        change the recovered network (Lasso penalty is scale-dependent)."""
+        rescaled = var_data.copy()
+        rescaled["V1"] = rescaled["V1"] * 100
+        ts_orig = estimate_var_network(var_data, cv=3, n_lambda=20, scale=True)
+        ts_resc = estimate_var_network(rescaled, cv=3, n_lambda=20, scale=True)
+        np.testing.assert_allclose(
+            ts_orig.temporal.adjacency, ts_resc.temporal.adjacency, atol=1e-8,
+        )
+
+    def test_intercept_offset_does_not_leak_into_contemporaneous(self, var_data):
+        """A constant offset on one variable should not change the
+        contemporaneous network (residuals include the intercept)."""
+        shifted = var_data.copy()
+        shifted["V2"] = shifted["V2"] + 50.0
+        ts_orig = estimate_var_network(var_data, cv=3, n_lambda=20)
+        ts_shift = estimate_var_network(shifted, cv=3, n_lambda=20)
+        np.testing.assert_allclose(
+            ts_orig.contemporaneous.adjacency,
+            ts_shift.contemporaneous.adjacency,
+            atol=0.05,
+        )

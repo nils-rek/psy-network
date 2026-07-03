@@ -26,6 +26,7 @@ def estimate_var_network(
     lambda_min_ratio: float = 0.01,
     contemp_threshold: float = 1e-4,
     n_jobs: int = 1,
+    scale: bool = False,
 ) -> TSNetwork:
     """Estimate a time-series network using a graphicalVAR-style approach.
 
@@ -72,6 +73,12 @@ def estimate_var_network(
     n_jobs : int
         Number of parallel jobs for variable-wise model fitting.
         ``1`` (default) runs serially; ``-1`` uses all cores.
+    scale : bool
+        If True, z-score standardize each variable before estimation.
+        The Lasso penalty is scale-dependent, so variables on wider
+        scales are otherwise penalized less; R's graphicalVAR
+        standardizes by default.  Coefficients then represent
+        standardized effects.  Default False.
 
     Returns
     -------
@@ -79,6 +86,14 @@ def estimate_var_network(
     """
     var_cols = validate_ts_data(data, beep, day)
     n_timepoints = len(data)
+
+    if scale:
+        data = data.copy()
+        for col in var_cols:
+            sd = data[col].std()
+            data[col] = (data[col] - data[col].mean()) / sd if sd > 0 else (
+                data[col] - data[col].mean()
+            )
 
     X, Y = make_lag_matrix(data, var_cols, beep, day)
 

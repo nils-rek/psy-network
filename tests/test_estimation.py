@@ -141,3 +141,29 @@ class TestEbicEdgeCounting:
         score_sparse = _ebic(P_sparse, S, 200, 0.5, threshold=1e-4)
         score_edge = _ebic(P_edge, S, 200, 0.5, threshold=1e-4)
         assert score_edge != score_sparse
+
+
+class TestInputValidation:
+    def test_non_numeric_column_raises(self, small_data):
+        bad = small_data.copy()
+        bad["label"] = "x"
+        for method in ["cor", "pcor", "ebicglasso"]:
+            with pytest.raises(ValueError, match="non-numeric"):
+                estimate_network(bad, method=method)
+
+    def test_nan_warns_and_uses_effective_n(self, small_data):
+        bad = small_data.copy()
+        bad.iloc[0, 0] = np.nan
+        bad.iloc[3, 2] = np.nan
+        with pytest.warns(UserWarning, match="missing values"):
+            net = estimate_network(bad, method="cor")
+        assert net.n_observations == len(bad) - 2
+
+    def test_collinear_columns_fall_back_to_pinv(self):
+        rng = np.random.default_rng(0)
+        a = rng.normal(size=100)
+        b = rng.normal(size=100)
+        df = pd.DataFrame({"A": a, "B": b, "C": a})  # C duplicates A
+        with pytest.warns(UserWarning, match="singular"):
+            net = estimate_network(df, method="pcor")
+        assert np.all(np.isfinite(net.adjacency))

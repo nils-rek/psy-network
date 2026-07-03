@@ -21,11 +21,13 @@ def _fit_one_var_column(
     T = Y.shape[0]
     lasso = LassoCV(
         cv=min(cv, T),
+        # int means "grid of this many alphas" on sklearn >= 1.7 (the
+        # pinned minimum); on older versions it would be a single penalty
         alphas=n_alphas,
         max_iter=max_iter,
     )
     lasso.fit(X, Y[:, j])
-    return j, lasso.coef_
+    return j, lasso.coef_, lasso.intercept_
 
 
 def estimate_temporal(
@@ -72,27 +74,30 @@ def estimate_temporal(
     temporal_net : Network
         Directed network with adjacency = B.T (``adjacency[i, j]`` = i -> j).
     residuals : ndarray, shape (T, p)
-        VAR residuals (Y - X @ B.T).
+        VAR residuals (Y - intercept - X @ B.T).
     """
     T, p = Y.shape
     B = np.zeros((p, p))
+    intercepts = np.zeros(p)
 
     if n_jobs == 1:
         for j in range(p):
-            _, coef = _fit_one_var_column(j, X, Y, cv, n_alphas, max_iter)
+            _, coef, icept = _fit_one_var_column(j, X, Y, cv, n_alphas, max_iter)
             B[j, :] = coef
+            intercepts[j] = icept
     else:
         results = Parallel(n_jobs=n_jobs)(
             delayed(_fit_one_var_column)(j, X, Y, cv, n_alphas, max_iter)
             for j in range(p)
         )
-        for j, coef in results:
+        for j, coef, icept in results:
             B[j, :] = coef
+            intercepts[j] = icept
 
     # Threshold small coefficients
     B[np.abs(B) < threshold] = 0.0
 
-    residuals = Y - X @ B.T
+    residuals = Y - intercepts - X @ B.T
 
     temporal_net = Network(
         adjacency=B.T.copy(),

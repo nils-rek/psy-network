@@ -9,6 +9,7 @@ from .._types import CorMethod
 from ..estimation_info import EstimationInfo
 from ..network import Network
 from ._registry import register
+from ._validate import _validate_estimation_data
 
 
 @register("cor")
@@ -26,6 +27,7 @@ class CorEstimator:
         **kwargs,
     ) -> Network:
         cor_method = CorMethod(cor_method)
+        n_effective = _validate_estimation_data(data)
         cormat = data.corr(method=cor_method.value).values.copy()
         np.fill_diagonal(cormat, 0.0)
         if threshold > 0:
@@ -43,7 +45,7 @@ class CorEstimator:
             adjacency=cormat,
             labels=list(data.columns),
             method=self.name,
-            n_observations=len(data),
+            n_observations=n_effective,
             weighted=True,
             signed=True,
             directed=False,

@@ -13,7 +13,9 @@ dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
     "pandas>=2.0",
-    "scikit-learn>=1.3",
+    # >=1.7: LassoCV(alphas=<int>) means "grid of that many alphas";
+    # on older versions an int is a single penalty value (see timeseries/_var.py)
+    "scikit-learn>=1.7",
     "networkx>=3.0",
     "matplotlib>=3.7",
     "joblib>=1.3",

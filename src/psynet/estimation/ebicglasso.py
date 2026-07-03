@@ -9,6 +9,7 @@ from .._types import CorMethod
 from ..estimation_info import EstimationInfo
 from ..network import Network
 from ._registry import register
+from ._validate import _validate_estimation_data
 
 
 @register("EBICglasso")
@@ -30,7 +31,7 @@ class EBICglassoEstimator:
         **kwargs,
     ) -> Network:
         cor_method = CorMethod(cor_method)
-        n, p = data.shape
+        n = _validate_estimation_data(data)
         cormat = data.corr(method=cor_method.value).values.copy()
 
         pcor, best_lambda, best_ebic, curve_df = _fit_ebic_glasso(
