@@ -85,12 +85,17 @@ def difference_test(
     statistic : str
         Statistic to test (``"edge"``, ``"strength"``, etc.).
     alpha : float
-        Significance level.
+        Significance level.  A pair differs significantly when the
+        ``1 - alpha`` bootstrap CI of its difference excludes zero
+        (matching R bootnet's ``differenceTest``).
 
     Returns
     -------
     pd.DataFrame
-        Square matrix of p-values (or boolean significant flags).
+        Square 0/1 matrix of significant differences.  Tie-corrected
+        two-tailed p-values and the CI bounds of each pairwise
+        difference are stored in ``result.attrs["p_values"]``,
+        ``result.attrs["ci_lower"]``, and ``result.attrs["ci_upper"]``.
     """
     df = boot_result.boot_statistics
     sub = df[(df["statistic"] == statistic) & (df["boot_id"] != "original")]
@@ -115,8 +120,10 @@ def difference_test(
         pivot = pivot.reindex(columns=node_ids)
         item_labels = node_ids
 
-    # Compute pairwise difference p-values
+    # Compute pairwise difference CIs and tie-corrected p-values
     p_matrix = np.ones((n_items, n_items))
+    ci_lower = np.zeros((n_items, n_items))
+    ci_upper = np.zeros((n_items, n_items))
     significant = np.zeros((n_items, n_items), dtype=bool)
 
     for i in range(n_items):
@@ -125,21 +132,30 @@ def difference_test(
             diffs = diffs[~np.isnan(diffs)]
             if len(diffs) == 0:
                 continue
-            # Two-tailed p-value: proportion of bootstrap diffs that
-            # include zero in their range
-            p_val = np.mean(diffs > 0)
-            p_val = 2 * min(p_val, 1 - p_val)  # two-tailed
-            p_matrix[i, j] = p_val
-            p_matrix[j, i] = p_val
-            significant[i, j] = p_val < alpha
-            significant[j, i] = p_val < alpha
+            # Significant iff the bootstrap CI of the difference
+            # excludes zero (bootnet's criterion)
+            lo, hi = np.quantile(diffs, [alpha / 2, 1 - alpha / 2])
+            is_sig = lo > 0 or hi < 0
+            # Tie-corrected two-tailed p-value: mass exactly at zero is
+            # split between the tails, so two structurally-zero
+            # statistics (all diffs == 0) yield p = 1, not p = 0.
+            p_pos = np.mean(diffs > 0) + 0.5 * np.mean(diffs == 0)
+            p_val = min(1.0, 2 * min(p_pos, 1 - p_pos))
+            p_matrix[i, j] = p_matrix[j, i] = p_val
+            # CI of (row - column); the reversed pair negates and swaps
+            ci_lower[i, j], ci_upper[i, j] = lo, hi
+            ci_lower[j, i], ci_upper[j, i] = -hi, -lo
+            significant[i, j] = significant[j, i] = is_sig
 
     result = pd.DataFrame(
         significant.astype(int),
         index=item_labels,
         columns=item_labels,
     )
-    result.attrs["p_values"] = pd.DataFrame(
-        p_matrix, index=item_labels, columns=item_labels,
-    )
+    for key, mat in [
+        ("p_values", p_matrix), ("ci_lower", ci_lower), ("ci_upper", ci_upper),
+    ]:
+        result.attrs[key] = pd.DataFrame(
+            mat, index=item_labels, columns=item_labels,
+        )
     return result

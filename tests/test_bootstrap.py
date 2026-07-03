@@ -6,6 +6,7 @@ import pytest
 
 from psynet import estimate_network
 from psynet.bootstrap import bootnet, BootstrapResult
+from psynet.bootstrap.stability import difference_test
 
 
 class TestNonparametricBootstrap:
@@ -74,6 +75,74 @@ class TestNonparametricBootstrap:
         assert isinstance(diff, pd.DataFrame)
         # Should be square
         assert diff.shape[0] == diff.shape[1]
+
+
+class TestDifferenceTestCorrectness:
+    """difference_test with controlled bootstrap distributions."""
+
+    @staticmethod
+    def _make_result(edge_values: dict, n_boots: int = 200):
+        """Build a BootstrapResult with fixed per-bootstrap edge values.
+
+        edge_values maps (node1, node2) -> array of length n_boots.
+        """
+        from psynet.bootstrap.results import BootstrapResult
+        from psynet.network import Network
+
+        rows = []
+        for b in range(n_boots):
+            for (n1, n2), vals in edge_values.items():
+                rows.append({
+                    "boot_id": b, "statistic": "edge",
+                    "node1": n1, "node2": n2, "value": vals[b],
+                })
+        boot_stats = pd.DataFrame(rows)
+        labels = sorted({n for pair in edge_values for n in pair})
+        p = len(labels)
+        net = Network(np.zeros((p, p)), labels, "test", 100)
+        return BootstrapResult(
+            original_network=net,
+            boot_statistics=boot_stats,
+            boot_type="nonparametric",
+            n_boots=n_boots,
+        )
+
+    def test_structurally_zero_edges_not_significant(self):
+        """Two edges that are zero in every bootstrap (sparse glasso) must
+        NOT test as significantly different, and p should be 1."""
+        n = 200
+        zeros = np.zeros(n)
+        result = self._make_result({
+            ("A", "B"): zeros,
+            ("A", "C"): zeros,
+        }, n_boots=n)
+        diff = difference_test(result, "edge")
+        assert diff.values[0, 1] == 0
+        p = diff.attrs["p_values"].values[0, 1]
+        assert p == pytest.approx(1.0)
+
+    def test_clearly_different_edges_significant(self):
+        n = 200
+        rng = np.random.default_rng(0)
+        result = self._make_result({
+            ("A", "B"): rng.normal(0.5, 0.02, n),
+            ("A", "C"): rng.normal(0.1, 0.02, n),
+        }, n_boots=n)
+        diff = difference_test(result, "edge")
+        assert diff.values[0, 1] == 1
+        assert diff.attrs["p_values"].values[0, 1] < 0.05
+        # CI of (A--B minus A--C) should exclude zero and be positive
+        assert diff.attrs["ci_lower"].loc["A -- B", "A -- C"] > 0
+
+    def test_overlapping_edges_not_significant(self):
+        n = 200
+        rng = np.random.default_rng(1)
+        result = self._make_result({
+            ("A", "B"): rng.normal(0.3, 0.1, n),
+            ("A", "C"): rng.normal(0.3, 0.1, n),
+        }, n_boots=n)
+        diff = difference_test(result, "edge")
+        assert diff.values[0, 1] == 0
 
 
 class TestCaseDroppingBootstrap:
