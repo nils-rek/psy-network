@@ -39,6 +39,23 @@ def _ebic(
     return ebic_val
 
 
+def precision_to_pcor(
+    precision: np.ndarray, *, threshold: float = 0.0,
+) -> np.ndarray:
+    """Convert a precision matrix to a partial correlation matrix.
+
+    pcor_ij = -P_ij / sqrt(P_ii * P_jj), zero diagonal, entries with
+    ``|value| < threshold`` zeroed when a threshold is given.
+    """
+    diag = np.sqrt(np.abs(np.diag(precision)))
+    diag[diag < 1e-10] = 1.0
+    pcor = -precision / np.outer(diag, diag)
+    np.fill_diagonal(pcor, 0.0)
+    if threshold > 0:
+        pcor[np.abs(pcor) < threshold] = 0.0
+    return pcor
+
+
 def _fit_ebic_glasso(
     cormat: np.ndarray,
     n: int,
@@ -116,10 +133,47 @@ def _fit_ebic_glasso(
         raise RuntimeError("GraphicalLasso failed to converge at all lambda values")
 
     # Convert precision to partial correlations
-    diag = np.sqrt(np.diag(best_precision))
-    pcor = -best_precision / np.outer(diag, diag)
-    np.fill_diagonal(pcor, 0.0)
-    pcor[np.abs(pcor) < threshold] = 0.0
+    pcor = precision_to_pcor(best_precision, threshold=threshold)
 
     curve_df = pd.DataFrame(curve_records) if curve_records is not None else None
     return pcor, best_lambda, best_ebic_val, curve_df
+
+
+def contemporaneous_from_residuals(
+    residuals: np.ndarray,
+    labels: list[str],
+    method: str,
+    *,
+    gamma: float = 0.5,
+    n_lambda: int = 100,
+    lambda_min_ratio: float = 0.01,
+    threshold: float = 1e-4,
+):
+    """Estimate an undirected GGM from (pooled) VAR residuals.
+
+    Shared by the timeseries and multilevel contemporaneous estimators:
+    correlation matrix of the residuals -> EBIC-tuned graphical lasso ->
+    partial correlation Network.
+    """
+    from .network import Network
+
+    T = residuals.shape[0]
+    cormat = np.corrcoef(residuals, rowvar=False)
+
+    pcor, _, _, _ = _fit_ebic_glasso(
+        cormat, T,
+        gamma=gamma,
+        n_lambda=n_lambda,
+        lambda_min_ratio=lambda_min_ratio,
+        threshold=threshold,
+    )
+
+    return Network(
+        adjacency=pcor,
+        labels=labels,
+        method=method,
+        n_observations=T,
+        weighted=True,
+        signed=True,
+        directed=False,
+    )

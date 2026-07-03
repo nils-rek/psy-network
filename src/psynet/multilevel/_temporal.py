@@ -33,22 +33,17 @@ class _TemporalResult(NamedTuple):
     intercepts: dict | None         # subject_id -> length-p array of intercepts
 
 
-# Patterns indicating severe convergence issues that warrant RE fallback
-_SEVERE_WARNING_PATTERNS = (
-    "singular",
-    "not positive definite",
-    "optimization failed",
-    "on the boundary",
+from ._re_common import (
+    RE_FALLBACK_CHAIN as _RE_FALLBACK_CHAIN,
+    STATSMODELS_SEVERE_PATTERNS,
+    has_severe_warnings,
+    validate_temporal_re,
 )
 
 
 def _has_severe_warnings(warn_messages: list[str]) -> bool:
     """Check if any warning messages indicate severe convergence issues."""
-    for msg in warn_messages:
-        msg_lower = msg.lower()
-        if any(pat in msg_lower for pat in _SEVERE_WARNING_PATTERNS):
-            return True
-    return False
+    return has_severe_warnings(warn_messages, STATSMODELS_SEVERE_PATTERNS)
 
 
 def _build_model_kwargs(
@@ -122,9 +117,6 @@ def _auto_re_structure(p: int, temporal_re: str) -> str:
     return temporal_re
 
 
-# RE structures from most complex to simplest
-_RE_FALLBACK_CHAIN = ("correlated", "orthogonal", "fixed")
-
 # Optimizers to try before falling back to a simpler RE structure
 _OPTIMIZER_CHAIN = ("lbfgs", "powell", "bfgs", "nm")
 
@@ -158,16 +150,8 @@ def _fit_one_dv(
 
     formula = f"{dv} ~ " + " + ".join(lag_cols)
 
-    # Validate temporal_re before determining fallback chain
-    if temporal_re not in _RE_FALLBACK_CHAIN:
-        raise ValueError(
-            f"temporal must be 'correlated', 'orthogonal', or 'fixed', "
-            f"got {temporal_re!r}"
-        )
-
-    # Determine fallback chain starting from the requested RE structure
-    start_idx = _RE_FALLBACK_CHAIN.index(temporal_re)
-    re_chain = _RE_FALLBACK_CHAIN[start_idx:]
+    # Validate temporal_re and get the fallback chain starting from it
+    re_chain = validate_temporal_re(temporal_re)
 
     result = None
     warn_messages: list[str] = []

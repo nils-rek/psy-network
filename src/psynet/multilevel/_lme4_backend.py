@@ -73,20 +73,17 @@ def _build_lmer_formula(
 # R warning detection
 # ---------------------------------------------------------------------------
 
-_R_SEVERE_PATTERNS = (
-    "failed to converge",
-    "singular",
-    "unable to evaluate",
-    "boundary",
+from ._re_common import (
+    R_SEVERE_PATTERNS as _R_SEVERE_PATTERNS,
+    RE_FALLBACK_CHAIN as _RE_FALLBACK_CHAIN,
+    has_severe_warnings,
+    validate_temporal_re,
 )
 
 
 def _has_severe_r_warnings(warnings_list: list[str]) -> bool:
     """Check if any R warning messages indicate severe convergence issues."""
-    for msg in warnings_list:
-        if any(pat in msg.lower() for pat in _R_SEVERE_PATTERNS):
-            return True
-    return False
+    return has_severe_warnings(warnings_list, _R_SEVERE_PATTERNS)
 
 
 # ---------------------------------------------------------------------------
@@ -251,13 +248,6 @@ def _extract_lme4_results(
 
 
 # ---------------------------------------------------------------------------
-# RE fallback chain (same as statsmodels path)
-# ---------------------------------------------------------------------------
-
-_RE_FALLBACK_CHAIN = ("correlated", "orthogonal", "fixed")
-
-
-# ---------------------------------------------------------------------------
 # Main per-DV fitting function
 # ---------------------------------------------------------------------------
 
@@ -294,15 +284,8 @@ def _fit_one_dv_lme4(
     with localconverter(ro.default_converter + pandas2ri.converter):
         data_r = ro.conversion.get_conversion().py2rpy(model_data)
 
-    # Validate temporal_re
-    if temporal_re not in _RE_FALLBACK_CHAIN:
-        raise ValueError(
-            f"temporal must be 'correlated', 'orthogonal', or 'fixed', "
-            f"got {temporal_re!r}"
-        )
-
-    start_idx = _RE_FALLBACK_CHAIN.index(temporal_re)
-    re_chain = _RE_FALLBACK_CHAIN[start_idx:]
+    # Validate temporal_re and get the fallback chain starting from it
+    re_chain = validate_temporal_re(temporal_re)
 
     result = None
     warn_messages: list[str] = []

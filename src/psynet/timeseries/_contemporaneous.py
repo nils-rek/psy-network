@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .._glasso_utils import _fit_ebic_glasso
+from .._glasso_utils import contemporaneous_from_residuals
 from ..network import Network
 
 
@@ -44,23 +44,10 @@ def estimate_contemporaneous(
     Network
         Undirected contemporaneous network.
     """
-    T, p = residuals.shape
-    cormat = np.corrcoef(residuals, rowvar=False)
-
-    pcor, _, _, _ = _fit_ebic_glasso(
-        cormat, T,
+    return contemporaneous_from_residuals(
+        residuals, labels, "graphicalVAR",
         gamma=gamma,
         n_lambda=n_lambda,
         lambda_min_ratio=lambda_min_ratio,
         threshold=threshold,
-    )
-
-    return Network(
-        adjacency=pcor,
-        labels=labels,
-        method="graphicalVAR",
-        n_observations=T,
-        weighted=True,
-        signed=True,
-        directed=False,
     )

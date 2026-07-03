@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .._glasso_utils import precision_to_pcor
 from .._types import PenaltyType, SelectionCriterion
 from ..network import Network
 from ._jgl import joint_graphical_lasso
@@ -95,12 +96,7 @@ def estimate_group_network(
     # Convert precision matrices to partial correlation networks
     networks = {}
     for k, label in enumerate(group_labels):
-        P = precisions[k]
-        diag = np.sqrt(np.abs(np.diag(P)))
-        diag[diag < 1e-10] = 1.0
-        pcor = -P / np.outer(diag, diag)
-        np.fill_diagonal(pcor, 0.0)
-        pcor[np.abs(pcor) < threshold] = 0.0
+        pcor = precision_to_pcor(precisions[k], threshold=threshold)
 
         networks[label] = Network(
             adjacency=pcor,

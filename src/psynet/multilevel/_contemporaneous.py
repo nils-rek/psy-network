@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .._glasso_utils import _fit_ebic_glasso
+from .._glasso_utils import contemporaneous_from_residuals
 from ..network import Network
 
 
@@ -47,25 +47,11 @@ def estimate_multilevel_contemporaneous(
         Undirected contemporaneous network.
     """
     # Drop rows with NaN (from per-model listwise deletion in temporal step)
-    residuals_clean = residuals_df[var_cols].dropna()
-    residuals = residuals_clean.values
-    T, p = residuals.shape
-    cormat = np.corrcoef(residuals, rowvar=False)
-
-    pcor, _, _, _ = _fit_ebic_glasso(
-        cormat, T,
+    residuals = residuals_df[var_cols].dropna().values
+    return contemporaneous_from_residuals(
+        residuals, var_cols, "mlVAR",
         gamma=gamma,
         n_lambda=n_lambda,
         lambda_min_ratio=lambda_min_ratio,
         threshold=threshold,
-    )
-
-    return Network(
-        adjacency=pcor,
-        labels=var_cols,
-        method="mlVAR",
-        n_observations=T,
-        weighted=True,
-        signed=True,
-        directed=False,
     )

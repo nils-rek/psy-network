@@ -35,11 +35,8 @@ def _partial_correlations(cormat: np.ndarray) -> np.ndarray:
         precision = linalg.pinv(cormat)
     else:
         precision = linalg.inv(cormat)
-    diag = np.sqrt(np.abs(np.diag(precision)))
-    diag[diag < 1e-12] = 1.0
-    pcor = -precision / np.outer(diag, diag)
-    np.fill_diagonal(pcor, 0.0)
-    return pcor
+    from .._glasso_utils import precision_to_pcor
+    return precision_to_pcor(precision)
 
 
 @register("pcor")

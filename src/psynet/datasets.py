@@ -6,6 +6,26 @@ import numpy as np
 import pandas as pd
 
 
+def _ensure_min_eigenvalue(
+    mat: np.ndarray, min_eig: float, boost: float,
+) -> np.ndarray:
+    """Shift the diagonal when the smallest eigenvalue is below ``min_eig``.
+
+    Adds ``(boost - lambda_min) * I`` so the result's smallest eigenvalue
+    is approximately ``boost``.
+    """
+    eigvals = np.linalg.eigvalsh(mat)
+    if eigvals.min() < min_eig:
+        mat = mat + (boost - eigvals.min()) * np.eye(mat.shape[0])
+    return mat
+
+
+def _normalize_to_correlation(mat: np.ndarray) -> np.ndarray:
+    """Rescale a covariance-like matrix to unit diagonal."""
+    d = np.sqrt(np.diag(mat))
+    return mat / np.outer(d, d)
+
+
 def make_bfi25(n: int = 500, seed: int = 42) -> pd.DataFrame:
     """Generate synthetic BFI-25 personality data (5 factors × 5 items).
 
@@ -54,9 +74,7 @@ def make_bfi25(n: int = 500, seed: int = 42) -> pd.DataFrame:
             factor_corr[j, i] = r
 
     # Ensure positive definite
-    eigvals = np.linalg.eigvalsh(factor_corr)
-    if eigvals.min() < 0.01:
-        factor_corr += (0.02 - eigvals.min()) * np.eye(len(factors))
+    factor_corr = _ensure_min_eigenvalue(factor_corr, 0.01, 0.02)
 
     L = np.linalg.cholesky(factor_corr)
     factor_scores = rng.standard_normal((n, len(factors))) @ L.T
@@ -131,13 +149,8 @@ def make_depression9(n: int = 300, seed: int = 123) -> pd.DataFrame:
             r = rng.uniform(0.15, 0.35)
             cormat[i, j] = cormat[j, i] = r
 
-    # Ensure positive definite
-    eigvals = np.linalg.eigvalsh(cormat)
-    if eigvals.min() < 0.01:
-        cormat += (0.02 - eigvals.min()) * np.eye(p)
-    # Re-normalize to correlation
-    d = np.sqrt(np.diag(cormat))
-    cormat = cormat / np.outer(d, d)
+    # Ensure positive definite, then re-normalize to correlation
+    cormat = _normalize_to_correlation(_ensure_min_eigenvalue(cormat, 0.01, 0.02))
 
     L = np.linalg.cholesky(cormat)
     raw = rng.standard_normal((n, p)) @ L.T
@@ -214,15 +227,10 @@ def make_multigroup(
             prec_g[j, i] = new_val
 
         # Ensure positive definite
-        eigvals = np.linalg.eigvalsh(prec_g)
-        if eigvals.min() < 0.1:
-            prec_g += (0.15 - eigvals.min()) * np.eye(p)
+        prec_g = _ensure_min_eigenvalue(prec_g, 0.1, 0.15)
 
         # Generate data from this precision matrix
-        cov_g = np.linalg.inv(prec_g)
-        # Normalize to correlation
-        d = np.sqrt(np.diag(cov_g))
-        cov_g = cov_g / np.outer(d, d)
+        cov_g = _normalize_to_correlation(np.linalg.inv(prec_g))
 
         L = np.linalg.cholesky(cov_g)
         data = rng.standard_normal((n_per_group, p)) @ L.T
@@ -317,14 +325,9 @@ def make_var_data(
         val = rng.uniform(0.2, 0.4)
         prec[i, i + 1] = val
         prec[i + 1, i] = val
-    # Ensure positive definite
-    eigvals_p = np.linalg.eigvalsh(prec)
-    if eigvals_p.min() < 0.1:
-        prec += (0.15 - eigvals_p.min()) * np.eye(p)
-    sigma = np.linalg.inv(prec)
-    # Normalize to correlation-like scale
-    d = np.sqrt(np.diag(sigma))
-    sigma = sigma / np.outer(d, d)
+    # Ensure positive definite, invert, normalize to correlation-like scale
+    prec = _ensure_min_eigenvalue(prec, 0.1, 0.15)
+    sigma = _normalize_to_correlation(np.linalg.inv(prec))
 
     L = np.linalg.cholesky(sigma)
 
@@ -394,9 +397,7 @@ def make_multilevel_data(
         val = rng.uniform(0.1, 0.3)
         sigma[i, i + 1] = val
         sigma[i + 1, i] = val
-    eigvals_s = np.linalg.eigvalsh(sigma)
-    if eigvals_s.min() < 0.1:
-        sigma += (0.15 - eigvals_s.min()) * np.eye(p)
+    sigma = _ensure_min_eigenvalue(sigma, 0.1, 0.15)
     L_sigma = np.linalg.cholesky(sigma)
 
     frames = []
