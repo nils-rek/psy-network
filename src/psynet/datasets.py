@@ -65,6 +65,11 @@ def make_bfi25(n: int = 500, seed: int = 42) -> pd.DataFrame:
     noise = rng.standard_normal((n, n_items)) * 0.4
     raw = factor_scores @ loadings.T + noise
 
+    # Standardize before the probability integral transform; norm.cdf
+    # assumes unit variance, and raw has SD < 1, which would cluster
+    # responses in the middle Likert categories.
+    raw = (raw - raw.mean(axis=0)) / raw.std(axis=0)
+
     # Scale to 1-6 Likert range
     from scipy.stats import norm
     percentiles = norm.cdf(raw)
@@ -139,8 +144,9 @@ def make_depression9(n: int = 300, seed: int = 123) -> pd.DataFrame:
 
     from scipy.stats import norm
     percentiles = norm.cdf(raw)
-    likert = np.ceil(percentiles * 4).astype(int)
-    likert = np.clip(likert, 0, 3)
+    # Map uniform percentiles onto categories 0-3 (floor of p*4; the
+    # boundary p == 1.0 folds into category 3)
+    likert = np.minimum(np.floor(percentiles * 4), 3).astype(int)
 
     columns = [f"dep{i}" for i in range(1, 10)]
     return pd.DataFrame(likert, columns=columns)
@@ -199,11 +205,11 @@ def make_multigroup(
         diff_idx = rng.choice(len(upper_idx), size=n_diff, replace=False)
         for idx in diff_idx:
             i, j = upper_idx[idx]
-            # Either add, remove, or change an edge
+            # Either remove the edge or (re)draw its weight
             if prec_g[i, j] != 0:
-                new_val = rng.choice([0.0, rng.uniform(0.1, 0.5)])
+                new_val = 0.0 if rng.random() < 0.5 else rng.uniform(0.1, 0.5)
             else:
-                new_val = rng.choice([0.0, rng.uniform(0.15, 0.4)])
+                new_val = 0.0 if rng.random() < 0.5 else rng.uniform(0.15, 0.4)
             prec_g[i, j] = new_val
             prec_g[j, i] = new_val
 
