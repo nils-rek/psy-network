@@ -9,22 +9,32 @@ import pandas as pd
 from sklearn.covariance import GraphicalLasso
 
 
-def _ebic(precision: np.ndarray, cov: np.ndarray, n: int, gamma: float) -> float:
+def _ebic(
+    precision: np.ndarray,
+    cov: np.ndarray,
+    n: int,
+    gamma: float,
+    threshold: float = 0.0,
+) -> float:
     """Compute Extended BIC for a given precision matrix.
 
     EBIC = -2 * loglik + E * log(n) + 4 * E * gamma * log(p)
 
     where loglik = (n/2) * (log|P| - trace(S @ P)) and E is the number
-    of non-zero off-diagonal elements (counted once per pair).
+    of off-diagonal elements with ``|value| > threshold`` (counted once
+    per pair).  The threshold matters because solvers leave numerically
+    tiny non-zeros that would otherwise inflate the edge count and bias
+    lambda selection relative to the thresholded network that is
+    ultimately returned.
     """
     p = precision.shape[0]
     sign, logdet = np.linalg.slogdet(precision)
     if sign <= 0:
         return np.inf
     loglik = (n / 2) * (logdet - np.trace(cov @ precision))
-    # Count unique non-zero off-diagonal edges
+    # Count unique off-diagonal edges above threshold
     upper = np.triu(precision, k=1)
-    n_edges = np.count_nonzero(upper)
+    n_edges = np.count_nonzero(np.abs(upper) > threshold)
     ebic_val = -2 * loglik + n_edges * np.log(n) + 4 * n_edges * gamma * np.log(p)
     return ebic_val
 
@@ -91,7 +101,7 @@ def _fit_ebic_glasso(
                 )
                 gl.fit(cormat)
             precision = gl.precision_
-            score = _ebic(precision, cormat, n, gamma)
+            score = _ebic(precision, cormat, n, gamma, threshold=threshold)
             if curve_records is not None:
                 curve_records.append({"lambda": alpha, "ebic": score})
             if score < best_ebic_val:

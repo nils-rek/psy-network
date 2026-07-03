@@ -13,11 +13,16 @@ def _group_ebic(
     n_samples: list[int],
     gamma: float,
     criterion: str,
+    threshold: float = 1e-4,
 ) -> float:
     """Compute information criterion summed across groups.
 
     Extends the single-group EBIC pattern:
     IC = sum_k [ -2 * loglik_k + E_k * pen(n_k, p) ]
+
+    ``threshold`` should match the threshold applied to the returned
+    network so the edge count used for selection agrees with the
+    displayed sparsity.
     """
     total = 0.0
     for k, (P, Sk, nk) in enumerate(zip(precisions, S, n_samples)):
@@ -27,9 +32,9 @@ def _group_ebic(
             return np.inf
         loglik = (nk / 2) * (logdet - np.trace(Sk @ P))
 
-        # Count unique non-zero off-diagonal edges
+        # Count unique off-diagonal edges above threshold
         upper = np.triu(P, k=1)
-        n_edges = np.count_nonzero(np.abs(upper) > 1e-10)
+        n_edges = np.count_nonzero(np.abs(upper) > threshold)
 
         if criterion == "ebic":
             ic = -2 * loglik + n_edges * np.log(nk) + 4 * n_edges * gamma * np.log(p)
@@ -54,6 +59,7 @@ def select_lambdas(
     lambda2_min_ratio: float = 0.01,
     max_iter: int = 500,
     tol: float = 1e-4,
+    threshold: float = 1e-4,
 ) -> tuple[float, float, list[np.ndarray]]:
     """Select lambda1 and lambda2 via information criterion.
 
@@ -78,6 +84,9 @@ def select_lambdas(
         Min-to-max ratio for lambda grids (log-spaced).
     max_iter, tol : int, float
         ADMM parameters.
+    threshold : float
+        Edge-count threshold for the information criterion; should match
+        the threshold used when constructing the final networks.
 
     Returns
     -------
@@ -104,18 +113,18 @@ def select_lambdas(
     if search == "sequential":
         return _search_sequential(
             S, n_samples, penalty, criterion, gamma,
-            lambda1_grid, lambda2_grid, max_iter, tol,
+            lambda1_grid, lambda2_grid, max_iter, tol, threshold,
         )
     else:
         return _search_simultaneous(
             S, n_samples, penalty, criterion, gamma,
-            lambda1_grid, lambda2_grid, max_iter, tol,
+            lambda1_grid, lambda2_grid, max_iter, tol, threshold,
         )
 
 
 def _search_sequential(
     S, n_samples, penalty, criterion, gamma,
-    lambda1_grid, lambda2_grid, max_iter, tol,
+    lambda1_grid, lambda2_grid, max_iter, tol, threshold,
 ):
     """Sequential search: optimize lambda1 with lambda2=0, then lambda2."""
     best_ic = np.inf
@@ -128,7 +137,7 @@ def _search_sequential(
             prec = joint_graphical_lasso(
                 S, n_samples, l1, 0.0, penalty, max_iter, tol,
             )
-            ic = _group_ebic(prec, S, n_samples, gamma, criterion)
+            ic = _group_ebic(prec, S, n_samples, gamma, criterion, threshold)
             if ic < best_ic:
                 best_ic = ic
                 best_l1 = l1
@@ -143,7 +152,7 @@ def _search_sequential(
             prec = joint_graphical_lasso(
                 S, n_samples, best_l1, l2, penalty, max_iter, tol,
             )
-            ic = _group_ebic(prec, S, n_samples, gamma, criterion)
+            ic = _group_ebic(prec, S, n_samples, gamma, criterion, threshold)
             if ic < best_ic:
                 best_ic = ic
                 best_l2 = l2
@@ -159,7 +168,7 @@ def _search_sequential(
 
 def _search_simultaneous(
     S, n_samples, penalty, criterion, gamma,
-    lambda1_grid, lambda2_grid, max_iter, tol,
+    lambda1_grid, lambda2_grid, max_iter, tol, threshold,
 ):
     """Simultaneous 2D grid search over lambda1 × lambda2."""
     best_ic = np.inf
@@ -173,7 +182,7 @@ def _search_simultaneous(
                 prec = joint_graphical_lasso(
                     S, n_samples, l1, l2, penalty, max_iter, tol,
                 )
-                ic = _group_ebic(prec, S, n_samples, gamma, criterion)
+                ic = _group_ebic(prec, S, n_samples, gamma, criterion, threshold)
                 if ic < best_ic:
                     best_ic = ic
                     best_l1 = l1

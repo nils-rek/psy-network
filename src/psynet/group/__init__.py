@@ -89,7 +89,7 @@ def estimate_group_network(
         best_l1, best_l2, precisions = select_lambdas(
             S_list, n_list, penalty, criterion, gamma, search,
             n_lambda1, n_lambda2, lambda1_min_ratio, lambda2_min_ratio,
-            max_iter, tol,
+            max_iter, tol, threshold,
         )
 
     # Convert precision matrices to partial correlation networks

@@ -115,3 +115,29 @@ class TestNetworkObject:
         net = estimate_network(small_data, method="cor")
         with pytest.raises(AttributeError):
             net.method = "other"
+
+
+class TestEbicEdgeCounting:
+    """The EBIC edge count must match the thresholded network's edges."""
+
+    def test_tiny_entries_ignored_with_threshold(self):
+        from psynet._glasso_utils import _ebic
+        p = 6
+        P_sparse = np.eye(p) * 2.0
+        P_tiny = P_sparse.copy()
+        P_tiny[0, 1] = P_tiny[1, 0] = 1e-8  # solver residue
+        S = np.eye(p)
+        score_sparse = _ebic(P_sparse, S, 200, 0.5, threshold=1e-4)
+        score_tiny = _ebic(P_tiny, S, 200, 0.5, threshold=1e-4)
+        np.testing.assert_allclose(score_tiny, score_sparse, rtol=1e-10)
+
+    def test_real_edges_still_counted(self):
+        from psynet._glasso_utils import _ebic
+        p = 6
+        P_sparse = np.eye(p) * 2.0
+        P_edge = P_sparse.copy()
+        P_edge[0, 1] = P_edge[1, 0] = 0.5
+        S = np.eye(p)
+        score_sparse = _ebic(P_sparse, S, 200, 0.5, threshold=1e-4)
+        score_edge = _ebic(P_edge, S, 200, 0.5, threshold=1e-4)
+        assert score_edge != score_sparse
