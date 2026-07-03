@@ -53,6 +53,7 @@ def plot_ts_networks(
         panels,
         layout=layout,
         layout_network=ts_net.contemporaneous,
+        shared_layout=shared_layout,
         figsize=figsize,
         seed=seed,
         suptitle="Time-Series Network (graphicalVAR)",

@@ -28,7 +28,8 @@ class CorEstimator:
     ) -> Network:
         cor_method = CorMethod(cor_method)
         n_effective = _validate_estimation_data(data)
-        cormat = data.corr(method=cor_method.value).values.copy()
+        full_cormat = data.corr(method=cor_method.value).values.copy()
+        cormat = full_cormat.copy()
         np.fill_diagonal(cormat, 0.0)
         if threshold > 0:
             cormat[np.abs(cormat) < threshold] = 0.0
@@ -39,7 +40,9 @@ class CorEstimator:
                 "threshold": threshold,
                 **kwargs,
             },
-            cor_matrix=cormat,
+            # The true correlation matrix (unit diagonal), matching what
+            # pcor and EBICglasso store
+            cor_matrix=full_cormat,
         )
         return Network(
             adjacency=cormat,

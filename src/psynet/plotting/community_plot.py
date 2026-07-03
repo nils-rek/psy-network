@@ -82,14 +82,12 @@ def plot_community(
     G = net.to_networkx()
 
     # Layout
+    from ._drawing import _kamada_dist
     layout_funcs = {
         "spring": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
         "fruchterman_reingold": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
         "circular": lambda: nx.circular_layout(G),
-        "kamada_kawai": lambda: nx.kamada_kawai_layout(
-            G, dist={n: {m: 1.0 / abs(G[n][m]["weight"]) if abs(G[n][m]["weight"]) > 0 else 10.0
-                         for m in G[n]} for n in G}
-        ),
+        "kamada_kawai": lambda: nx.kamada_kawai_layout(G, dist=_kamada_dist(G)),
     }
     pos = layout_funcs.get(layout, layout_funcs["spring"])()
 
@@ -113,6 +111,12 @@ def plot_community(
     T.apply_theme_to_axes(net_ax)
 
     # Community colors
+    missing = [node for node in net.labels if node not in communities.index]
+    if missing:
+        raise ValueError(
+            f"Community assignments missing for nodes: {missing}. "
+            f"Pass a Series covering every node in the network."
+        )
     colors = palette if palette is not None else T.COMMUNITY_PALETTE
     node_colors = [colors[communities[node] % len(colors)] for node in net.labels]
 

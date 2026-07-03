@@ -52,6 +52,21 @@ class Network:
     n_nodes: int = field(init=False)
 
     def __post_init__(self) -> None:
+        adjacency = np.array(self.adjacency, dtype=float)
+        if adjacency.ndim != 2 or adjacency.shape[0] != adjacency.shape[1]:
+            raise ValueError(
+                f"adjacency must be a square 2-D matrix, got shape "
+                f"{adjacency.shape}"
+            )
+        if adjacency.shape[0] != len(self.labels):
+            raise ValueError(
+                f"adjacency shape {adjacency.shape} does not match the "
+                f"number of labels ({len(self.labels)})"
+            )
+        # Store a read-only copy so the frozen dataclass cannot be
+        # mutated through a shared array reference
+        adjacency.flags.writeable = False
+        object.__setattr__(self, "adjacency", adjacency)
         object.__setattr__(self, "n_nodes", len(self.labels))
 
     # ------------------------------------------------------------------
@@ -82,7 +97,7 @@ class Network:
                         "node2": self.labels[j],
                         "weight": w,
                     })
-        return pd.DataFrame(rows)
+        return pd.DataFrame(rows, columns=["node1", "node2", "weight"])
 
     # ------------------------------------------------------------------
     # Methods

@@ -29,6 +29,21 @@ def _prepare_graph(net: Network, absolute_weights: bool) -> nx.Graph:
     return G
 
 
+def _partition_to_series(partition, labels: list[str]) -> pd.Series:
+    """Convert a list of community sets to a Series over ``labels``.
+
+    Raises if any label is missing from the partition, rather than
+    silently leaving it with an undefined community.
+    """
+    assignments = {node: cid for cid, members in enumerate(partition)
+                   for node in members}
+    comm = pd.Series(assignments, name="community").reindex(labels)
+    if comm.isna().any():
+        missing = list(comm.index[comm.isna()])
+        raise RuntimeError(f"No community assigned for nodes: {missing}")
+    return comm.astype(int)
+
+
 def _renumber_communities(comm: pd.Series) -> pd.Series:
     """Renumber community IDs so community 0 contains the lexicographically first node."""
     if len(comm) == 0:
@@ -38,11 +53,7 @@ def _renumber_communities(comm: pd.Series) -> pd.Series:
     first_comm = comm[first_node]
 
     # Build mapping: first_comm -> 0, then remaining in order of first appearance
-    old_ids = comm.unique()
-    mapping = {}
-    next_id = 0
-    # Assign 0 to the community of the first node
-    mapping[first_comm] = 0
+    mapping = {first_comm: 0}
     next_id = 1
     # Assign remaining IDs in order of first appearance (by sorted node name)
     for node in sorted(comm.index):
@@ -76,11 +87,7 @@ def louvain(net: Network, *, resolution: float = 1.0, seed: int | None = None,
     G = _prepare_graph(net, absolute_weights)
     partition = nx.community.louvain_communities(G, resolution=resolution, seed=seed,
                                                   weight="weight")
-    comm = pd.Series(index=net.labels, dtype=int, name="community")
-    for cid, members in enumerate(partition):
-        for node in members:
-            comm[node] = cid
-    return _renumber_communities(comm)
+    return _renumber_communities(_partition_to_series(partition, net.labels))
 
 
 def greedy_modularity(net: Network, *, absolute_weights: bool = True) -> pd.Series:
@@ -100,11 +107,7 @@ def greedy_modularity(net: Network, *, absolute_weights: bool = True) -> pd.Seri
     """
     G = _prepare_graph(net, absolute_weights)
     partition = nx.community.greedy_modularity_communities(G, weight="weight")
-    comm = pd.Series(index=net.labels, dtype=int, name="community")
-    for cid, members in enumerate(partition):
-        for node in members:
-            comm[node] = cid
-    return _renumber_communities(comm)
+    return _renumber_communities(_partition_to_series(partition, net.labels))
 
 
 def _walktrap_component(nodes: list[str], adj: np.ndarray, steps: int) -> dict[str, int]:
@@ -175,7 +178,8 @@ def _walktrap_component(nodes: list[str], adj: np.ndarray, steps: int) -> dict[s
             mod = nx.community.modularity(G, partition, weight="weight")
         except nx.NetworkXError:
             mod = 0.0
-        if mod >= best_mod:
+        # Strict > keeps the smallest number of communities on ties
+        if mod > best_mod:
             best_mod = mod
             best_labels = labels.copy()
 
@@ -205,17 +209,19 @@ def walktrap(net: Network, *, steps: int = 4, absolute_weights: bool = True) -> 
     G = _prepare_graph(net, absolute_weights)
     labels = net.labels
 
-    # Find connected components
+    # Find connected components. to_networkx() adds every label as a
+    # node, so the components cover all labels (isolated nodes are
+    # singleton components).
     components = list(nx.connected_components(G))
 
-    comm = pd.Series(index=labels, dtype=int, name="community")
+    assignments: dict[str, int] = {}
     next_comm_id = 0
 
     for component in components:
         comp_nodes = sorted(component)
         if len(comp_nodes) == 1:
             # Isolated node gets its own community
-            comm[comp_nodes[0]] = next_comm_id
+            assignments[comp_nodes[0]] = next_comm_id
             next_comm_id += 1
             continue
 
@@ -232,17 +238,11 @@ def walktrap(net: Network, *, steps: int = 4, absolute_weights: bool = True) -> 
 
         # Offset community IDs
         for node, cid in comp_communities.items():
-            comm[node] = cid + next_comm_id
+            assignments[node] = cid + next_comm_id
         max_cid = max(comp_communities.values()) if comp_communities else -1
         next_comm_id += max_cid + 1
 
-    # Handle nodes not in any edge (truly isolated)
-    for node in labels:
-        if node not in G.nodes() or G.degree(node) == 0:
-            if pd.isna(comm.get(node, np.nan)):
-                comm[node] = next_comm_id
-                next_comm_id += 1
-
+    comm = pd.Series(assignments, name="community").reindex(labels).astype(int)
     return _renumber_communities(comm)
 
 

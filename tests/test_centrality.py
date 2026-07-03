@@ -240,3 +240,58 @@ class TestDirectedCentrality:
             in_expected_influence(net)
         with pytest.raises(ValueError, match="directed"):
             out_expected_influence(net)
+
+
+class TestNetworkValidation:
+    """Network __post_init__ shape validation and immutability."""
+
+    def test_shape_mismatch_raises(self):
+        from psynet.network import Network
+        with pytest.raises(ValueError, match="does not match"):
+            Network(np.zeros((3, 3)), ["A", "B"], "test", 10)
+
+    def test_non_square_raises(self):
+        from psynet.network import Network
+        with pytest.raises(ValueError, match="square"):
+            Network(np.zeros((3, 2)), ["A", "B", "C"], "test", 10)
+
+    def test_adjacency_is_defensive_copy(self):
+        from psynet.network import Network
+        src = np.zeros((2, 2))
+        net = Network(src, ["A", "B"], "test", 10)
+        src[0, 1] = 99.0
+        assert net.adjacency[0, 1] == 0.0
+
+    def test_adjacency_read_only(self):
+        from psynet.network import Network
+        net = Network(np.zeros((2, 2)), ["A", "B"], "test", 10)
+        with pytest.raises(ValueError):
+            net.adjacency[0, 1] = 1.0
+
+    def test_empty_edges_df_has_columns(self):
+        from psynet.network import Network
+        net = Network(np.zeros((2, 2)), ["A", "B"], "test", 10)
+        edges = net.edges_df
+        assert list(edges.columns) == ["node1", "node2", "weight"]
+        assert len(edges) == 0
+
+
+class TestClosenessIsolatedNode:
+    def _net_with_isolate(self):
+        from psynet.network import Network
+        adj = np.zeros((3, 3))
+        adj[0, 1] = adj[1, 0] = 0.5  # C is isolated
+        return Network(adj, ["A", "B", "C"], "test", 100)
+
+    def test_isolated_node_closeness_zero(self):
+        net = self._net_with_isolate()
+        c = closeness(net)
+        assert c["C"] == 0.0
+        assert c["A"] > 0
+
+    def test_unnormalized_is_inverse_distance_sum(self):
+        net = self._net_with_isolate()
+        c = closeness(net, normalized=False)
+        # A's only reachable neighbour is B at distance 1/0.5 = 2
+        np.testing.assert_almost_equal(c["A"], 0.5)
+        assert c["C"] == 0.0

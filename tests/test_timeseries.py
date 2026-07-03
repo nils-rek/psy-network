@@ -285,6 +285,16 @@ class TestTSPlotting:
         assert isinstance(fig, Figure)
         plt.close(fig)
 
+    @pytest.mark.parametrize("shared", [True, False])
+    def test_shared_layout_flag(self, var_data, shared):
+        """shared_layout must be honored (it was previously a no-op)."""
+        import matplotlib.pyplot as plt
+        from matplotlib.figure import Figure
+        ts = estimate_var_network(var_data, cv=3, n_lambda=20)
+        fig = plot_ts_networks(ts, layout="spring", shared_layout=shared)
+        assert isinstance(fig, Figure)
+        plt.close(fig)
+
 
 # ── Scaling and residuals ───────────────────────────────────────────
 

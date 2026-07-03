@@ -142,7 +142,7 @@ def _search_sequential(
                 best_ic = ic
                 best_l1 = l1
                 best_prec = prec
-        except Exception:
+        except (FloatingPointError, ValueError, np.linalg.LinAlgError):
             continue
 
     # Phase 2: search lambda2 with fixed lambda1
@@ -157,7 +157,7 @@ def _search_sequential(
                 best_ic = ic
                 best_l2 = l2
                 best_prec = prec
-        except Exception:
+        except (FloatingPointError, ValueError, np.linalg.LinAlgError):
             continue
 
     if best_prec is None:
@@ -188,7 +188,7 @@ def _search_simultaneous(
                     best_l1 = l1
                     best_l2 = l2
                     best_prec = prec
-            except Exception:
+            except (FloatingPointError, ValueError, np.linalg.LinAlgError):
                 continue
 
     if best_prec is None:

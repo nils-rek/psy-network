@@ -135,7 +135,7 @@ def bootnet_group(
     group_col: str | None = None,
     n_boots: int = 1000,
     statistics: list[str] | None = None,
-    n_cores: int = 1,
+    n_cores: int = -1,
     seed: int | None = None,
     verbose: bool = True,
     **est_kwargs,
@@ -157,7 +157,8 @@ def bootnet_group(
     statistics : list[str], optional
         Statistics to extract. Defaults to edge + centrality measures.
     n_cores : int
-        Number of parallel workers.
+        Number of parallel workers (joblib).  ``-1`` (default) uses all
+        available cores, matching ``bootnet``.
     seed : int, optional
         Random seed.
     verbose : bool

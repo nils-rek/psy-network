@@ -85,13 +85,17 @@ def _single_case_drop(
     method: str,
     original_centralities: dict[str, pd.Series],
     proportion: float,
+    n_keep: int,
     boot_id: int,
     rng_seed: int,
     est_kwargs: dict,
 ) -> list[dict]:
-    """Run one case-dropping iteration at a given proportion."""
+    """Run one case-dropping iteration retaining exactly ``n_keep`` rows.
+
+    ``proportion`` is only the label attached to the records; recomputing
+    it from the float here could differ by one case due to rounding.
+    """
     rng = np.random.default_rng(rng_seed)
-    n_keep = max(3, int(len(data) * proportion))
     idx = rng.choice(len(data), size=n_keep, replace=False)
     sub_data = data.iloc[idx].reset_index(drop=True)
 
@@ -277,9 +281,10 @@ def bootnet(
         # Derive proportions from integer sample sizes to match R's bootnet
         n = len(data)
         raw_props = np.linspace(case_max, case_min, case_n)
-        n_keeps = np.clip(np.floor(n * raw_props).astype(int), 3, n)
-        proportions = np.unique(n_keeps)[::-1] / n  # deduplicate, descending
-        n_prop_steps = len(proportions)
+        n_keeps = np.unique(
+            np.clip(np.floor(n * raw_props).astype(int), 3, n)
+        )[::-1]  # deduplicate, descending
+        n_prop_steps = len(n_keeps)
 
         seeds = rng.integers(0, 2**31, size=n_boots * n_prop_steps)
 
@@ -288,16 +293,16 @@ def bootnet(
 
         tasks = []
         seed_idx = 0
-        for prop in proportions:
+        for n_keep in n_keeps:
             for b in range(n_boots):
-                tasks.append((prop, b, int(seeds[seed_idx])))
+                tasks.append((int(n_keep), b, int(seeds[seed_idx])))
                 seed_idx += 1
 
         results = Parallel(n_jobs=n_cores, verbose=int(verbose))(
             delayed(_single_case_drop)(
-                data, method, original_centralities, prop, b, s, est_kwargs,
+                data, method, original_centralities, k / n, k, b, s, est_kwargs,
             )
-            for prop, b, s in tasks
+            for k, b, s in tasks
         )
 
         all_records: list[dict] = []

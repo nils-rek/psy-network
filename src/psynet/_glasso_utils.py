@@ -108,7 +108,8 @@ def _fit_ebic_glasso(
                 best_ebic_val = score
                 best_precision = precision
                 best_lambda = alpha
-        except Exception:
+        except (FloatingPointError, ValueError, np.linalg.LinAlgError):
+            # Convergence/numerical failure at this lambda — skip it
             continue
 
     if best_precision is None:

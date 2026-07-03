@@ -15,6 +15,21 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
 
+def _kamada_dist(G) -> dict:
+    """Distance dict for kamada_kawai: 1/|weight| (large for zero weights).
+
+    kamada_kawai fails on negative edge weights, so distances are based
+    on absolute weight.
+    """
+    return {
+        n: {
+            m: 1.0 / abs(G[n][m]["weight"]) if abs(G[n][m]["weight"]) > 0 else 10.0
+            for m in G[n]
+        }
+        for n in G
+    }
+
+
 def _compute_layout(network, layout: str = "spring", seed: int = 42) -> dict:
     """Compute node positions from a Network using a networkx layout algorithm.
 
@@ -37,7 +52,7 @@ def _compute_layout(network, layout: str = "spring", seed: int = 42) -> dict:
         "spring": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
         "fruchterman_reingold": lambda: nx.spring_layout(G, seed=seed, weight="weight"),
         "circular": lambda: nx.circular_layout(G),
-        "kamada_kawai": lambda: nx.kamada_kawai_layout(G),
+        "kamada_kawai": lambda: nx.kamada_kawai_layout(G, dist=_kamada_dist(G)),
     }
     return layout_funcs.get(layout, layout_funcs["spring"])()
 
@@ -188,13 +203,14 @@ def _plot_network_panels(
     *,
     layout: str = "spring",
     layout_network=None,
+    shared_layout: bool = True,
     figsize: tuple[float, float] | None = None,
     seed: int = 42,
     suptitle: str = "",
     show_legend: bool = True,
     **kwargs,
 ) -> Figure:
-    """Plot multiple network panels side by side with a shared layout.
+    """Plot multiple network panels side by side.
 
     Parameters
     ----------
@@ -203,8 +219,12 @@ def _plot_network_panels(
     layout : str
         Layout algorithm.
     layout_network : Network, optional
-        Network to compute layout from. If None, uses the first undirected
-        network in panels, or the first network.
+        Network to compute the shared layout from. If None, uses the first
+        undirected network in panels, or the first network.
+    shared_layout : bool
+        If True (default), all panels use the same node positions computed
+        from ``layout_network``.  If False, each panel's layout is computed
+        from its own network.
     figsize : tuple, optional
         Figure size. Defaults to (7*n_panels, 6).
     seed : int
@@ -248,10 +268,11 @@ def _plot_network_panels(
         if layout_network is None:
             layout_network = panels[0][1]
 
-    pos = _compute_layout(layout_network, layout, seed)
+    shared_pos = _compute_layout(layout_network, layout, seed)
 
     plot_axes = axes[:n] if show_legend else axes
     for ax, (title, net, directed) in zip(plot_axes, panels):
+        pos = shared_pos if shared_layout else _compute_layout(net, layout, seed)
         _draw_network_on_ax(net, ax, pos, directed=directed,
                             show_legend=show_legend, **kwargs)
         ax.set_title(f"{title} (n={net.n_observations})",

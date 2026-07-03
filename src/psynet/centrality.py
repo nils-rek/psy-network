@@ -121,21 +121,39 @@ def closeness(net: Network, *, normalized: bool = True) -> pd.Series:
         Estimated network.
     normalized : bool
         If ``True`` (default), closeness values are multiplied by ``n - 1``
-        (NetworkX convention).  Set to ``False`` for unnormalized values
-        matching R's ``centrality_auto()`` output.
+        (NetworkX convention, including the Wasserman-Faust correction on
+        disconnected graphs).  Set to ``False`` for unnormalized values
+        ``1 / sum(d)`` matching R's ``centrality_auto()`` output.
+
+    Notes
+    -----
+    Nodes with no finite-distance neighbours (isolated nodes) get
+    closeness 0.
     """
     G = net.to_networkx()
     # Set distance = 1/|weight| for shortest-path computation
     for u, v, d in G.edges(data=True):
         w = abs(d.get("weight", 1.0))
         d["distance"] = 1.0 / w if w > 0 else np.inf
-    vals = nx.closeness_centrality(G, distance="distance")
+    if normalized:
+        vals = nx.closeness_centrality(G, distance="distance")
+    else:
+        # Compute 1/sum(d) directly; dividing NetworkX's normalized
+        # output by (n-1) would not undo its Wasserman-Faust scaling on
+        # disconnected graphs.
+        vals = {}
+        for node in G.nodes():
+            dists = nx.single_source_dijkstra_path_length(
+                G, node, weight="distance",
+            )
+            total = sum(v for k, v in dists.items()
+                        if k != node and np.isfinite(v))
+            n_reachable = sum(
+                1 for k, v in dists.items() if k != node and np.isfinite(v)
+            )
+            vals[node] = (1.0 / total) if (total > 0 and n_reachable > 0) else 0.0
     s = pd.Series(vals, name="closeness").reindex(net.labels)
-    if not normalized:
-        # NetworkX returns (n-1)/sum(d); unnormalized is 1/sum(d)
-        n = net.n_nodes
-        s = s / (n - 1) if n > 1 else s
-    return s
+    return s.fillna(0.0)
 
 
 def betweenness(net: Network, *, normalized: bool = True) -> pd.Series:

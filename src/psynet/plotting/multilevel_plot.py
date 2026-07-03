@@ -54,6 +54,7 @@ def plot_multilevel_networks(
         panels,
         layout=layout,
         layout_network=ml_net.contemporaneous,
+        shared_layout=shared_layout,
         figsize=figsize,
         seed=seed,
         suptitle="Multilevel VAR Network (mlVAR)",
