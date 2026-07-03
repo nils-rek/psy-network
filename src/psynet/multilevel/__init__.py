@@ -135,15 +135,18 @@ def estimate_multilevel_network(
         engine=engine, auto_re=auto_re,
     )
 
-    # Threshold small temporal coefficients
-    fixed_coef = temporal_result.fixed_coef.copy()
+    # Transpose from regression orientation B[outcome, predictor] to the
+    # network convention adjacency[i, j] = directed edge i -> j, then
+    # threshold small temporal coefficients.
+    fixed_coef = temporal_result.fixed_coef.T.copy()
     fixed_coef[np.abs(fixed_coef) < threshold] = 0.0
+    pvalues = temporal_result.pvalues.T.copy()
 
     # P-value thresholding (matches R's mlVAR nonsig="hide")
     unthresholded_temporal = None
     pval_mask = None
     if temporal_alpha is not None:
-        pval_mask = temporal_result.pvalues > temporal_alpha
+        pval_mask = pvalues > temporal_alpha
         # Store unthresholded version before zeroing
         unthresholded_temporal = Network(
             adjacency=fixed_coef.copy(),
@@ -170,7 +173,7 @@ def estimate_multilevel_network(
     subject_ids = sorted(data[subject].unique())
     subject_temporal = {}
     for s in subject_ids:
-        s_coef = temporal_result.subject_coefs[s].copy()
+        s_coef = temporal_result.subject_coefs[s].T.copy()
         s_coef[np.abs(s_coef) < threshold] = 0.0
         if pval_mask is not None:
             s_coef[pval_mask] = 0.0
@@ -213,7 +216,7 @@ def estimate_multilevel_network(
         labels=var_cols,
         subject_ids=subject_ids,
         method="mlVAR",
-        pvalues=temporal_result.pvalues,
+        pvalues=pvalues,
         fit_info=temporal_result.fit_info,
         unthresholded_temporal=unthresholded_temporal,
     )

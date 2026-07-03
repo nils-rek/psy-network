@@ -698,3 +698,45 @@ class TestLme4Backend:
         f = _build_lmer_formula("V1", ["V1_lag", "V2_lag"], "subject", "fixed")
         assert "(1 | subject)" in f
         assert "V1_lag" not in f.split("(1 | subject)")[1]
+
+
+# ---------------------------------------------------------------------------
+# Directed edge orientation
+# ---------------------------------------------------------------------------
+
+class TestTemporalOrientation:
+    """Regression tests: temporal adjacency[i, j] means the directed edge i -> j."""
+
+    @pytest.fixture()
+    def oneway_multilevel_data(self):
+        """V1 at t-1 drives V2 at t within every subject; no reverse effect."""
+        rng = np.random.default_rng(11)
+        frames = []
+        for s in range(8):
+            n = 80
+            v1 = np.zeros(n)
+            v2 = np.zeros(n)
+            for t in range(1, n):
+                v1[t] = 0.3 * v1[t - 1] + rng.normal(scale=1.0)
+                v2[t] = 0.6 * v1[t - 1] + rng.normal(scale=1.0)
+            frames.append(pd.DataFrame({"subject": f"S{s}", "V1": v1, "V2": v2}))
+        return pd.concat(frames, ignore_index=True)
+
+    def test_adjacency_and_pvalue_orientation(self, oneway_multilevel_data):
+        result = estimate_multilevel_network(
+            oneway_multilevel_data, "subject", temporal_alpha=None,
+        )
+        adj = result.temporal.adjacency
+        # V1 -> V2 must sit at adjacency[0, 1]
+        assert adj[0, 1] > 0.3
+        assert abs(adj[1, 0]) < 0.15
+        # pvalues share the adjacency orientation
+        assert result.pvalues[0, 1] < 0.05
+
+    def test_edges_df_direction(self, oneway_multilevel_data):
+        result = estimate_multilevel_network(
+            oneway_multilevel_data, "subject", temporal_alpha=None,
+        )
+        edges = result.temporal.edges_df
+        fwd = edges[(edges["node1"] == "V1") & (edges["node2"] == "V2")]
+        assert len(fwd) == 1 and fwd["weight"].iloc[0] > 0.3

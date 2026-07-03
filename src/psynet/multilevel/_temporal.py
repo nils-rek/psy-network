@@ -20,7 +20,11 @@ from joblib import Parallel, delayed
 
 
 class _TemporalResult(NamedTuple):
-    """Result container for temporal network estimation."""
+    """Result container for temporal network estimation.
+
+    Matrices are in regression orientation B[outcome, predictor];
+    the caller transposes to the network convention A[i, j] = i -> j.
+    """
     fixed_coef: np.ndarray          # p x p fixed-effect coefficient matrix
     pvalues: np.ndarray             # p x p p-value matrix
     subject_coefs: dict             # subject_id -> p x p coefficient matrix

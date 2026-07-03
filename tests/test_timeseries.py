@@ -219,6 +219,52 @@ class TestMakeVarData:
         assert ts.n_nodes == 4
 
 
+# ── Directed edge orientation ───────────────────────────────────────
+
+
+class TestTemporalOrientation:
+    """Regression tests: adjacency[i, j] must mean the directed edge i -> j."""
+
+    @pytest.fixture()
+    def oneway_var_data(self):
+        """V1 at t-1 drives V2 at t; no reverse effect."""
+        rng = np.random.default_rng(7)
+        n = 600
+        v1 = np.zeros(n)
+        v2 = np.zeros(n)
+        for t in range(1, n):
+            v1[t] = 0.3 * v1[t - 1] + rng.normal(scale=1.0)
+            v2[t] = 0.6 * v1[t - 1] + rng.normal(scale=1.0)
+        return pd.DataFrame({"V1": v1, "V2": v2})
+
+    def test_adjacency_orientation(self, oneway_var_data):
+        ts = estimate_var_network(oneway_var_data, cv=3, n_lambda=20)
+        adj = ts.temporal.adjacency
+        # V1 -> V2 must sit at adjacency[0, 1]
+        assert adj[0, 1] > 0.3
+        assert abs(adj[1, 0]) < 0.1
+
+    def test_edges_df_and_networkx_direction(self, oneway_var_data):
+        ts = estimate_var_network(oneway_var_data, cv=3, n_lambda=20)
+        edges = ts.temporal.edges_df
+        fwd = edges[(edges["node1"] == "V1") & (edges["node2"] == "V2")]
+        assert len(fwd) == 1 and fwd["weight"].iloc[0] > 0.3
+        G = ts.temporal.to_networkx()
+        assert G.has_edge("V1", "V2")
+        rev_weight = G["V2"]["V1"]["weight"] if G.has_edge("V2", "V1") else 0.0
+        assert abs(rev_weight) < 0.1
+
+    def test_in_out_strength_direction(self, oneway_var_data):
+        from psynet.centrality import in_strength, out_strength
+        ts = estimate_var_network(oneway_var_data, cv=3, n_lambda=20)
+        ins = in_strength(ts.temporal)
+        outs = out_strength(ts.temporal)
+        # V1 drives V2: V1 has the outgoing cross-edge, V2 the incoming one
+        # (autoregressive diagonal contributes equally to in and out)
+        assert outs["V1"] > ins["V1"] + 0.2
+        assert ins["V2"] > outs["V2"] + 0.2
+
+
 # ── Plotting ────────────────────────────────────────────────────────
 
 

@@ -174,20 +174,21 @@ class TestDirectedCentrality:
 
     def _make_directed(self):
         from psynet.network import Network
-        # adjacency[j, k] = effect of k on j (k -> j)
+        # adjacency[i, j] = directed edge i -> j
+        # Edges: B->A 0.4, C->A -0.2, A->B 0.3, B->C 0.5
         adj = np.array([
-            [0.0, 0.4, -0.2],
-            [0.3, 0.0,  0.0],
-            [0.0, 0.5,  0.0],
+            [0.0, 0.3, 0.0],
+            [0.4, 0.0, 0.5],
+            [-0.2, 0.0, 0.0],
         ])
         return Network(adj, ["A", "B", "C"], "test", 100, directed=True)
 
     def test_in_strength(self):
         net = self._make_directed()
         s = in_strength(net)
-        # A: |0.4| + |-0.2| = 0.6
-        # B: |0.3| + |0.0| = 0.3
-        # C: |0.0| + |0.5| = 0.5
+        # A: incoming B->A, C->A: |0.4| + |-0.2| = 0.6
+        # B: incoming A->B: |0.3| = 0.3
+        # C: incoming B->C: |0.5| = 0.5
         np.testing.assert_almost_equal(s["A"], 0.6)
         np.testing.assert_almost_equal(s["B"], 0.3)
         np.testing.assert_almost_equal(s["C"], 0.5)
@@ -195,9 +196,9 @@ class TestDirectedCentrality:
     def test_out_strength(self):
         net = self._make_directed()
         s = out_strength(net)
-        # A: col 0 = |0.0| + |0.3| + |0.0| = 0.3
-        # B: col 1 = |0.4| + |0.0| + |0.5| = 0.9
-        # C: col 2 = |-0.2| + |0.0| + |0.0| = 0.2
+        # A: outgoing A->B: |0.3| = 0.3
+        # B: outgoing B->A, B->C: |0.4| + |0.5| = 0.9
+        # C: outgoing C->A: |-0.2| = 0.2
         np.testing.assert_almost_equal(s["A"], 0.3)
         np.testing.assert_almost_equal(s["B"], 0.9)
         np.testing.assert_almost_equal(s["C"], 0.2)
@@ -212,9 +213,9 @@ class TestDirectedCentrality:
     def test_in_expected_influence(self):
         net = self._make_directed()
         ei = in_expected_influence(net)
-        # A: 0.4 + (-0.2) = 0.2
-        # B: 0.3 + 0.0 = 0.3
-        # C: 0.0 + 0.5 = 0.5
+        # A: incoming 0.4 + (-0.2) = 0.2
+        # B: incoming 0.3
+        # C: incoming 0.5
         np.testing.assert_almost_equal(ei["A"], 0.2)
         np.testing.assert_almost_equal(ei["B"], 0.3)
         np.testing.assert_almost_equal(ei["C"], 0.5)
@@ -222,9 +223,9 @@ class TestDirectedCentrality:
     def test_out_expected_influence(self):
         net = self._make_directed()
         ei = out_expected_influence(net)
-        # A: col 0 = 0.0 + 0.3 + 0.0 = 0.3
-        # B: col 1 = 0.4 + 0.0 + 0.5 = 0.9
-        # C: col 2 = -0.2 + 0.0 + 0.0 = -0.2
+        # A: outgoing 0.3
+        # B: outgoing 0.4 + 0.5 = 0.9
+        # C: outgoing -0.2
         np.testing.assert_almost_equal(ei["A"], 0.3)
         np.testing.assert_almost_equal(ei["B"], 0.9)
         np.testing.assert_almost_equal(ei["C"], -0.2)

@@ -42,8 +42,10 @@ def estimate_temporal(
     """Estimate temporal (directed) network via sparse VAR(1).
 
     Fits a separate LassoCV for each variable, regressing Y[:,j] on X.
-    The coefficient matrix B has B[j, k] = effect of variable k at t-1
-    on variable j at t.
+    The regression coefficient matrix B has B[j, k] = effect of variable
+    k at t-1 on variable j at t.  The returned network stores the
+    transpose, so ``adjacency[i, j]`` is the directed edge i -> j
+    (i at t-1 predicts j at t), matching the plotting/networkx convention.
 
     Parameters
     ----------
@@ -68,7 +70,7 @@ def estimate_temporal(
     Returns
     -------
     temporal_net : Network
-        Directed network with B as adjacency matrix.
+        Directed network with adjacency = B.T (``adjacency[i, j]`` = i -> j).
     residuals : ndarray, shape (T, p)
         VAR residuals (Y - X @ B.T).
     """
@@ -93,7 +95,7 @@ def estimate_temporal(
     residuals = Y - X @ B.T
 
     temporal_net = Network(
-        adjacency=B,
+        adjacency=B.T.copy(),
         labels=labels,
         method="graphicalVAR",
         n_observations=T,

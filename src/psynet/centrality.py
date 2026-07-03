@@ -29,9 +29,9 @@ def strength(net: Network) -> pd.Series:
 def in_strength(net: Network) -> pd.Series:
     """Sum of absolute incoming edge weights per node.
 
-    For a directed network with adjacency convention ``A[j, k]`` = effect
-    of *k* on *j* (i.e. k → j), in-strength of node *i* is the row sum
-    ``sum(|A[i, :]|)``.
+    For a directed network with adjacency convention ``A[i, j]`` =
+    directed edge i → j, in-strength of node *j* is the column sum
+    ``sum(|A[:, j]|)``.
 
     Raises
     ------
@@ -41,7 +41,7 @@ def in_strength(net: Network) -> pd.Series:
     if not net.directed:
         raise ValueError("in_strength is only defined for directed networks")
     return pd.Series(
-        np.sum(np.abs(net.adjacency), axis=1),
+        np.sum(np.abs(net.adjacency), axis=0),
         index=net.labels, name="inStrength",
     )
 
@@ -49,9 +49,9 @@ def in_strength(net: Network) -> pd.Series:
 def out_strength(net: Network) -> pd.Series:
     """Sum of absolute outgoing edge weights per node.
 
-    For a directed network with adjacency convention ``A[j, k]`` = effect
-    of *k* on *j* (i.e. k → j), out-strength of node *k* is the column
-    sum ``sum(|A[:, k]|)``.
+    For a directed network with adjacency convention ``A[i, j]`` =
+    directed edge i → j, out-strength of node *i* is the row sum
+    ``sum(|A[i, :]|)``.
 
     Raises
     ------
@@ -61,7 +61,7 @@ def out_strength(net: Network) -> pd.Series:
     if not net.directed:
         raise ValueError("out_strength is only defined for directed networks")
     return pd.Series(
-        np.sum(np.abs(net.adjacency), axis=0),
+        np.sum(np.abs(net.adjacency), axis=1),
         index=net.labels, name="outStrength",
     )
 
@@ -77,7 +77,7 @@ def in_expected_influence(net: Network) -> pd.Series:
     if not net.directed:
         raise ValueError("in_expected_influence is only defined for directed networks")
     return pd.Series(
-        np.sum(net.adjacency, axis=1),
+        np.sum(net.adjacency, axis=0),
         index=net.labels, name="inExpectedInfluence",
     )
 
@@ -93,7 +93,7 @@ def out_expected_influence(net: Network) -> pd.Series:
     if not net.directed:
         raise ValueError("out_expected_influence is only defined for directed networks")
     return pd.Series(
-        np.sum(net.adjacency, axis=0),
+        np.sum(net.adjacency, axis=1),
         index=net.labels, name="outExpectedInfluence",
     )
 

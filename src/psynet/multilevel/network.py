@@ -37,7 +37,9 @@ class MultilevelNetwork:
     method : str
         Estimation method (``"mlVAR"``).
     pvalues : np.ndarray
-        p x p p-value matrix for temporal fixed effects.
+        p x p p-value matrix for temporal fixed effects, in the same
+        orientation as the temporal adjacency (``pvalues[i, j]`` belongs
+        to the directed edge i -> j).
     fit_info : dict
         BIC and AIC per DV model.
     unthresholded_temporal : Network or None
