@@ -138,6 +138,7 @@ def bootnet_group(
     n_cores: int = -1,
     seed: int | None = None,
     verbose: bool = True,
+    reselect_lambdas: bool = False,
     **est_kwargs,
 ) -> GroupBootstrapResult:
     """Run nonparametric bootstrap for group network estimation.
@@ -163,6 +164,12 @@ def bootnet_group(
         Random seed.
     verbose : bool
         Print progress.
+    reselect_lambdas : bool
+        If False (default), replicates reuse the lambda1/lambda2 selected
+        on the original data — matching R bootnet's fixed-tuning
+        bootstrap, which is much faster and isolates sampling variability
+        of the estimates from tuning variability.  If True, the full
+        lambda selection is re-run inside every replicate.
     **est_kwargs
         Keyword arguments passed to ``estimate_group_network``.
 
@@ -180,6 +187,15 @@ def bootnet_group(
 
     # Estimate original
     original = estimate_group_network(data, group_col=group_col, **est_kwargs)
+
+    # Fix the tuning parameters for replicates unless re-selection is
+    # explicitly requested (or lambdas were already user-supplied)
+    if not reselect_lambdas:
+        est_kwargs = {
+            **est_kwargs,
+            "lambda1": original.lambda1,
+            "lambda2": original.lambda2,
+        }
 
     # Extract original statistics
     orig_records = []

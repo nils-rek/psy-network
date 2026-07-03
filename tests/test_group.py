@@ -505,3 +505,29 @@ class TestMakeMultigroup:
         )
         assert isinstance(gn, GroupNetwork)
         assert gn.n_groups == 2
+
+
+# ------------------------------------------------------------------ #
+# TestGroupBootstrapLambdaReuse
+# ------------------------------------------------------------------ #
+
+class TestGroupBootstrapLambdaReuse:
+    def test_default_reuses_original_lambdas(self):
+        """Replicates run with the original lambdas by default (fast path)."""
+        df = make_multigroup(n_per_group=60, p=5, seed=42)
+        result = bootnet_group(
+            df, group_col="group", n_boots=3, n_cores=1, seed=1,
+            verbose=False, n_lambda1=5, n_lambda2=5,
+        )
+        assert isinstance(result, GroupBootstrapResult)
+        assert len(result.boot_statistics) > 0
+
+    def test_reselect_lambdas_path(self):
+        """reselect_lambdas=True re-runs selection per replicate."""
+        df = make_multigroup(n_per_group=60, p=5, seed=42)
+        result = bootnet_group(
+            df, group_col="group", n_boots=2, n_cores=1, seed=1,
+            verbose=False, reselect_lambdas=True, n_lambda1=3, n_lambda2=3,
+        )
+        assert isinstance(result, GroupBootstrapResult)
+        assert len(result.boot_statistics) > 0
