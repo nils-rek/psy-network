@@ -15,9 +15,9 @@ A Python equivalent of R's `bootnet` package for psychometric network analysis: 
 - `src/psynet/community.py` — walktrap, louvain, greedy modularity
 - `src/psynet/network.py` — frozen Network dataclass (core result object)
 - `src/psynet/datasets.py` — synthetic data generators (BFI-25, PHQ-9, multi-group, VAR, multilevel)
-- `src/psynet/_glasso_utils.py` — shared EBIC-glasso pipeline (`_fit_ebic_glasso`)
+- `src/psynet/_glasso_utils.py` — shared EBIC-glasso pipeline (`_fit_ebic_glasso`, `precision_to_pcor`, `contemporaneous_from_residuals`)
 - `src/psynet/_validation_utils.py` — shared VAR validation helpers
-- `tests/` — pytest suite (175 tests)
+- `tests/` — pytest suite (280+ tests)
 
 ## Build & Test
 ```bash
@@ -26,7 +26,8 @@ pytest tests/ -v           # run all tests
 ```
 
 ## Key Conventions
-- **Frozen dataclass** for Network — immutability is intentional
+- **Directed adjacency convention**: `adjacency[i, j]` = directed edge i → j (networkx/qgraph standard). VAR/mlVAR estimators fit `B[outcome, predictor]` internally and transpose once at Network construction; `MultilevelNetwork.pvalues` shares the adjacency orientation.
+- **Frozen dataclass** for Network — immutability is intentional; the adjacency array is a read-only defensive copy and shape-validated in `__post_init__`
 - **`@register` decorator** for adding new estimators — just create a file in `estimation/` and decorate
 - **EBICglasso pipeline is centralized** in `_glasso_utils._fit_ebic_glasso()` — used by `estimation/ebicglasso.py`, `timeseries/_contemporaneous.py`, `multilevel/_contemporaneous.py`, and `multilevel/_between.py`
 - **VAR validation helpers** are centralized in `_validation_utils.py` — shared by `timeseries/` and `multilevel/`
@@ -39,7 +40,7 @@ pytest tests/ -v           # run all tests
 - **Between-subjects network sparsity**: EBIC-glasso applied to random intercept correlations may produce different sparsity patterns than R's mlVAR due to lambda grid and solver differences (sklearn's GraphicalLasso vs R's glasso). Edge weight correlations are high (r > 0.9 with lme4) but structure agreement (which edges are non-zero) can be lower. The `between_gamma` parameter allows tuning sparsity.
 
 ## Dependencies
-numpy, scipy, pandas, scikit-learn, networkx, matplotlib, joblib
+numpy, scipy, pandas, scikit-learn (>=1.7 — `LassoCV(alphas=<int>)` semantics), networkx, matplotlib, joblib
 
 Optional: statsmodels (required for multilevel estimation only), rpy2 (recommended for mlVAR — enables lme4 backend)
 
